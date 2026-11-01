@@ -7,11 +7,11 @@
   <meta name="description" content="내 위치·정문·회기역·영통역 반경 500m 카공하기 좋은 카페를 ✨Gemini 한줄 요약과 콘센트 필터로 한눈에 찾아보세요!" />
   <meta name="theme-color" content="#F8FAFC" />
 
-  <!-- 카카오톡·인스타 DM 공유용 Open Graph(OG) 메타 태그 -->
+  <!-- 카카오톡·인스타 DM 공유용 Open Graph(OG) 메타 태그 (정규 도메인 적용) -->
   <meta property="og:title" content="☕ 경희대 카공맵 (서울캠·국제캠)" />
   <meta property="og:description" content="내 위치·정문·회기역·영통역 반경 500m 카공하기 좋은 카페를 ✨Gemini 한줄 요약과 콘센트 필터로 한눈에 찾아보세요!" />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://goo.gle/kyunghee" />
+  <meta property="og:url" content="https://korewajiyuda.github.io/khu_kagongmap/" />
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="☕ 경희대 카공맵 (서울캠·국제캠)" />
   <meta name="twitter:description" content="내 위치·정문·회기역·영통역 반경 500m 카공하기 좋은 카페를 ✨Gemini 한줄 요약과 콘센트 필터로 한눈에 찾아보세요!" />
@@ -19,13 +19,13 @@
   <!-- 커피 이모지(☕) SVG 파비콘 -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>☕</text></svg>" />
 
-  <!-- Pretendard 웹폰트 (최우선 적용) -->
+  <!-- Pretendard 웹폰트 -->
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
 
   <!-- Leaflet.js CDN -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
-  <!-- GA4 (gtag.js) 기본 세팅 (G-XXXXXXXXXX 상수 분리) -->
+  <!-- GA4 (gtag.js) 기본 세팅 -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
   <script>
     window.GA_MEASUREMENT_ID = 'G-XXXXXXXXXX';
@@ -39,9 +39,8 @@
 </head>
 <body>
   <div class="app-shell">
-    <!-- 상단 헤더 & 컨트롤 바 (심플 & 모던, sticky + 반투명 블러) -->
+    <!-- 상단 헤더 & 컨트롤 바 (sticky + 반투명 블러) -->
     <header class="app-header">
-      <!-- 헤더 1단: 좌측 "☕ 경희대 카공맵", 우측 [서울캠 / 국제캠] 캡슐형 세그먼트 토글 + [🔗 공유] 아이콘 버튼 -->
       <div class="header-top">
         <h1 class="brand-title" id="headerTitle">☕ 경희대 카공맵</h1>
 
@@ -50,25 +49,20 @@
             <button type="button" class="campus-btn active" data-campus="seoul" id="btnCampusSeoul">서울캠</button>
             <button type="button" class="campus-btn" data-campus="global" id="btnCampusGlobal">국제캠</button>
           </div>
-          <button type="button" class="share-icon-btn" id="btnShare" aria-label="친구에게 링크 공유하기" title="링크 복사 (goo.gle/kyunghee)">
+          <button type="button" class="share-icon-btn" id="btnShare" aria-label="친구에게 카공맵 공유하기" title="현재 캠퍼스 카공맵 링크 복사">
             🔗
           </button>
         </div>
       </div>
 
-      <!-- 헤더 2단: 기준점 알약(Pill) 가로 스크롤 + 카공 전용 필터 칩 가로 스크롤 -->
+      <!-- 기준점 알약(Pill) + 다중 선택(Multi-select AND) 카공 필터 칩 -->
       <div class="header-controls">
-        <div class="pill-scroll-row" id="anchorButtonGroup" aria-label="기준 거점 선택">
-          <!-- JS에서 [📍 내 위치 / 정문 / 후문 / 회기역] 또는 [📍 내 위치 / 정문 / 사색의광장 / 영통역] 렌더링 -->
-        </div>
-
-        <div class="pill-scroll-row filter-row" id="filterChipContainer" aria-label="카공 해시태그 필터">
-          <!-- JS에서 카공맵 전용 필터 (#콘센트많음 #조용한 #밤늦게까지 #24시간 #교내카페 #1인석) 렌더링 -->
-        </div>
+        <div class="pill-scroll-row" id="anchorButtonGroup" aria-label="기준 거점 선택"></div>
+        <div class="pill-scroll-row filter-row" id="filterChipContainer" aria-label="카공 해시태그 다중 필터"></div>
       </div>
     </header>
 
-    <!-- 결과 카운트 & 반경 500m 상태 바 -->
+    <!-- 상단 상태 바 & [지도 뷰 ↔ 목록 뷰] 빠른 전환 탭 -->
     <div class="toolbar-row">
       <div class="result-count">
         <span class="gemini-live-dot"></span>
@@ -77,36 +71,41 @@
         <span>카페 <strong id="placeCount">0</strong>곳</span>
         <span class="radius-pill" id="radiusBadge">500m 내</span>
       </div>
-      <button type="button" class="radius-toggle-btn" id="btnToggleRadius">
-        전체 거리순
-      </button>
+      <div class="toolbar-right-actions">
+        <button type="button" class="radius-toggle-btn" id="btnToggleRadius">
+          전체 거리순
+        </button>
+        <div class="view-mode-group" role="tablist" aria-label="화면 보기 모드">
+          <!-- 요구사항 1: 초기 진입 시 지도 뷰 우선 활성화 -->
+          <button type="button" class="view-toggle-btn active" id="btnViewMap" data-view="map">지도</button>
+          <button type="button" class="view-toggle-btn" id="btnViewList" data-view="list">목록</button>
+        </div>
+      </div>
     </div>
 
-    <!-- 메인 컨텐츠 영역: 목록 뷰 & 지도 뷰 -->
+    <!-- 메인 컨텐츠 영역: 1) 지도 뷰 (기본 노출) & 2) 목록 뷰 -->
     <main class="main-content">
-      <!-- 목록 뷰 -->
-      <div class="place-list" id="placeListContainer">
-        <!-- JS에서 장소 카드 렌더링 -->
-      </div>
-
-      <!-- 지도 뷰 컨테이너 -->
-      <div class="map-view-wrap hidden" id="mapViewContainer">
+      <!-- 요구사항 1: 초기 진입 시 지도 뷰 우선 노출 (hidden 제거) -->
+      <div class="map-view-wrap" id="mapViewContainer">
         <div class="map-floating-badge" id="mapStatusBadge">
           <span class="legend-dot anchor"></span>기준점
           <span class="legend-dot place"></span>카페 마커 터치
         </div>
         <div id="leafletMap" class="leaflet-map-box"></div>
-        <!-- 마커 클릭 시 부드럽게 올라오는 바텀시트 스타일 요약 카드 -->
-        <div id="mapSelectedCard" class="map-bottom-sheet-card hidden" role="region" aria-label="선택된 카페 요약"></div>
+        <!-- 마커 클릭 시 올라오는 바텀시트 요약 카드 (메타데이터 + 사진/후기 외부 링크 + 목록 보기 전환 포함) -->
+        <div id="mapSelectedCard" class="map-bottom-sheet-card hidden" role="region" aria-label="선택된 카페 상세 정보"></div>
       </div>
+
+      <!-- 목록 뷰 (초기 진입 시 숨김, 플로팅 버튼/바텀시트/상단 탭 조작 시 노출) -->
+      <div class="place-list hidden" id="placeListContainer"></div>
     </main>
 
-    <!-- 하단 공유 배너 -->
+    <!-- 하단 공유 배너 (정규 도메인 안내) -->
     <footer class="app-footer">
       <div class="share-banner">
         <div class="share-banner-text">
-          <strong>동기들에게도 카공맵 공유하기 ✨</strong>
-          <span>경희대 전용 숏링크 <code>goo.gle/kyunghee</code></span>
+          <strong>동기들에게도 경희대 카공맵 공유하기 ✨</strong>
+          <span id="shareUrlPreview">korewajiyuda.github.io/khu_kagongmap</span>
         </div>
         <button type="button" class="share-copy-inline" id="btnFooterShare">링크 복사</button>
       </div>
@@ -115,18 +114,14 @@
       </div>
     </footer>
 
-    <!-- 하단 CTA 바로 위에 떠 있는 트렌디한 다크 캡슐 플로팅 버튼 (#0F172A) -->
-    <button type="button" class="floating-view-btn" id="btnFloatingViewToggle" aria-label="지도 보기 전환">
-      🗺️ 지도 보기
+    <!-- 하단 CTA 바로 위에 떠 있는 다크 캡슐 플로팅 버튼 (초기값: 📋 카페 목록 보기) -->
+    <button type="button" class="floating-view-btn" id="btnFloatingViewToggle" aria-label="목록 보기 전환">
+      📋 카페 목록 보기
     </button>
 
     <!-- 최하단 고정 CTA (클릭 시 신청 바로가기 + 오류 해결 가이드 3편 바텀시트 오픈) -->
     <div class="fixed-cta-bar">
-      <button
-        type="button"
-        class="gemini-cta-btn"
-        id="btnOpenGeminiOfferSheet"
-      >
+      <button type="button" class="gemini-cta-btn" id="btnOpenGeminiOfferSheet">
         <span class="cta-sparkle">✨</span>
         <span class="cta-main-text">Gemini 1년 무료 혜택 받기</span>
         <span class="cta-sub-badge" id="ctaUtmBadge">서울캠 전용</span>
@@ -136,7 +131,7 @@
     <!-- 토스트 알림 -->
     <div class="toast-message" id="toastPopup" role="status" aria-live="polite"></div>
 
-    <!-- ✨ Gemini 1년 무료 혜택 신청 & 오류 해결 가이드 3편 바텀시트 모달 -->
+    <!-- ✨ Gemini 1년 무료 혜택 신청 & 오류 해결 가이드 3편 바텀시트 -->
     <div class="a2hs-modal-backdrop hidden" id="geminiOfferModal">
       <div class="a2hs-modal-sheet offer-sheet" role="dialog" aria-modal="true" aria-labelledby="offerSheetTitle">
         <div class="a2hs-sheet-handle"></div>
@@ -149,7 +144,6 @@
           <p>학교 이메일 인증으로 월 $19.99 상당의 Google AI Pro 혜택을 1년간 무료로 이용하세요!</p>
         </div>
 
-        <!-- 메인 신청 버튼 (공식 집계용 UTM + &utm_content={campus}_kagong 동적 반영) -->
         <a
           href="https://gemini.google/students/?utm_source=student&utm_medium=social&utm_campaign=microsite_campus_kyunghee-ambassador&utm_content=seoul_kagong"
           target="_blank"
@@ -161,7 +155,6 @@
           <span class="offer-cta-arrow">↗</span>
         </a>
 
-        <!-- 신청 중 자주 발생하는 오류 해결 가이드 3편 시리즈 -->
         <div class="troubleshooting-box">
           <div class="ts-title-row">
             <strong>💡 신청 중 오류가 발생하셨나요? (해결 가이드 3편)</strong>
@@ -169,13 +162,7 @@
           </div>
 
           <div class="ts-link-list">
-            <a
-              href="https://www.instagram.com/p/De1N9ysDAXr/"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="ts-guide-item"
-              data-guide="step1_account_login"
-            >
+            <a href="https://www.instagram.com/p/De1N9ysDAXr/" target="_blank" rel="noopener noreferrer" class="ts-guide-item" data-guide="step1_account_login">
               <span class="ts-step-badge">1편</span>
               <div class="ts-item-text">
                 <strong>계정 및 로그인 오류 편</strong>
@@ -184,13 +171,7 @@
               <span class="ts-ext-arrow">인스타 보기 ↗</span>
             </a>
 
-            <a
-              href="https://www.instagram.com/p/De1OMcRFw9g/"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="ts-guide-item"
-              data-guide="step2_sheerid_verify"
-            >
+            <a href="https://www.instagram.com/p/De1OMcRFw9g/" target="_blank" rel="noopener noreferrer" class="ts-guide-item" data-guide="step2_sheerid_verify">
               <span class="ts-step-badge">2편</span>
               <div class="ts-item-text">
                 <strong>SheerID 학생 인증 오류 편</strong>
@@ -199,13 +180,7 @@
               <span class="ts-ext-arrow">인스타 보기 ↗</span>
             </a>
 
-            <a
-              href="https://www.instagram.com/p/De1OpwKDEq6/"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="ts-guide-item"
-              data-guide="step3_payment_apply"
-            >
+            <a href="https://www.instagram.com/p/De1OpwKDEq6/" target="_blank" rel="noopener noreferrer" class="ts-guide-item" data-guide="step3_payment_apply">
               <span class="ts-step-badge">3편</span>
               <div class="ts-item-text">
                 <strong>혜택 적용 및 결제 오류 편</strong>
@@ -229,16 +204,14 @@
         <div class="a2hs-header">
           <div class="a2hs-badge-icon" id="a2hsIconBox">✨</div>
           <div class="a2hs-title-group">
-            <span class="a2hs-kicker" id="a2hsKicker">Google Gemini Campus Tip</span>
+            <span class="a2hs-kicker" id="a2hsKicker">KHU Campus Tip</span>
             <h2 id="a2hsTitle">인스타·카톡에서는 위치 권한과 홈 화면 추가가 제한돼요!</h2>
             <p id="a2hsSubtitle">외부 브라우저로 열면 내 위치 500m 탐색과 홈 화면 추가가 바로 가능해요.</p>
           </div>
         </div>
-        <div class="a2hs-body" id="a2hsInstructionBody">
-          <!-- JS에서 인앱 브라우저 vs 일반 브라우저 안내 UI 분기 -->
-        </div>
+        <div class="a2hs-body" id="a2hsInstructionBody"></div>
         <div class="a2hs-actions" id="a2hsActionGroup">
-          <button type="button" class="a2hs-copy-btn" id="btnA2HSCopyLink">🔗 링크 복사하기</button>
+          <button type="button" class="a2hs-copy-btn" id="btnA2HSCopyLink">🔗 카공맵 링크 복사하기</button>
           <button type="button" class="a2hs-close-btn" id="btnCloseA2HS">닫기</button>
         </div>
       </div>

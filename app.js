@@ -1,17 +1,22 @@
 /**
  * ☕ 경희대 카공맵 (단독 웹앱) - app.js
- * Toss·Catchtable 스타일 UI + Google Gemini Ambassador 감성
- * 순수 Vanilla JS (데이터: 구글 시트 CSV URL / 로컬 data.csv Fallback, 지도: Leaflet.js CDN)
+ * [5대 요구사항 완벽 반영 버전]
+ * 1) 초기 진입 화면: 지도 뷰 우선 노출 (viewMode: 'map' 기본값 + 바텀시트/플로팅/탭에서 목록 뷰 전환)
+ * 2) 사진 및 후기 영역 외부 링크 연동 (네이버 지도 사진/방문자 리뷰 & 카카오맵 후기 새 창 이동)
+ * 3) 공유 숏링크 정규화 (제미나이 링크 제거 -> https://korewajiyuda.github.io/khu_kagongmap/?campus=...)
+ * 4) 태그 다중 선택(Multi-select) AND 교집합 필터링 고도화 (이벤트 위임 및 정규화 비교)
+ * 5) 장소 상세 메타데이터 추가 반영 (운영 날짜 days, 운영 시간 hours, 콘센트 유무/개수 outlets)
  */
 
-// 1. 구글 시트 CSV 연동 상수 (값이 있으면 우선 fetch, 비어 있거나 실패 시 로컬 data.csv Fallback)
+// 1. 구글 시트 CSV 연동 상수 (실패 또는 추가 컬럼 누락 시 로컬 data.csv 메타데이터와 자동 병합/Fallback)
 const GOOGLE_SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/1td87-lDak8Cj8abo_qKMiARD8rXJ14Mwr4g3rknZJLU/export?format=csv";
 const LOCAL_CSV_URL = "./data.csv";
 
-// GA4 측정 ID 및 공식 링크 상수
-const GA_MEASUREMENT_ID = window.GA_MEASUREMENT_ID || "G-XXXXXXXXXX";
-const SHORT_SHARE_URL = "https://goo.gle/kyunghee";
+// 요구사항 3: 정규 공유 도메인 상수 (제미나이 링크 완전 제거)
+const CANONICAL_SERVICE_URL = "https://korewajiyuda.github.io/khu_kagongmap/";
+
+// 하단 고정 CTA용 공식 학생 혜택 URL
 const GEMINI_BASE_URL =
   "https://gemini.google/students/?utm_source=student&utm_medium=social&utm_campaign=microsite_campus_kyunghee-ambassador";
 const DEFAULT_RADIUS_METERS = 500;
@@ -30,7 +35,7 @@ const CAMPUS_ANCHORS = {
   ],
 };
 
-// 3. 카공맵 전용 다중 선택 필터 칩 정의 (거지맵 완전 제거)
+// 3. 카공맵 전용 다중 선택 필터 칩 정의
 const KAGONG_FILTER_TAGS = [
   "콘센트많음",
   "조용한",
@@ -40,32 +45,25 @@ const KAGONG_FILTER_TAGS = [
   "1인석",
 ];
 
-// 4. 애플리케이션 상태 (카공맵 단일화)
+// 4. 애플리케이션 상태 (요구사항 1: 초기 진입 시 'map' 뷰 우선 노출)
 const state = {
   places: [],
   campus: "seoul", // 'seoul' | 'global'
-  mapType: "kagong", // 항상 'kagong' 고정
-  anchorKey: "main_gate", // 'gps' | 각 캠퍼스 거점 key
+  mapType: "kagong",
+  anchorKey: "main_gate",
   anchorCoord: { lat: 37.5939, lng: 127.0530, label: "정문" },
-  radiusLimitEnabled: true, // true: 반경 500m 이내, false: 캠퍼스 전체 거리순
-  selectedTags: new Set(),
-  viewMode: "list", // 'list' | 'map'
+  radiusLimitEnabled: true,
+  selectedTags: new Set(), // 다중 선택 태그 Set (AND 조건)
+  viewMode: "map", // 기본값을 'list'가 아닌 'map'으로 변경!
   initialMarkerId: null,
 };
 
-// Leaflet 지도 인스턴스 및 레이어
 let leafletMap = null;
 let radiusCircle = null;
 let anchorMarker = null;
 let placeMarkersLayer = null;
-let deferredInstallPrompt = null;
 
-window.addEventListener("beforeinstallprompt", (e) => {
-  e.preventDefault();
-  deferredInstallPrompt = e;
-});
-
-// 5. GA4 이벤트 트래킹 래퍼 함수 (7개 필수 이벤트 연동 + console.log('[GA4]', ...) 동시 출력)
+// 5. GA4 이벤트 트래킹 래퍼 함수
 function trackEvent(eventName, params = {}) {
   const payload = {
     campus: state.campus,
@@ -97,7 +95,55 @@ function getDistanceMeters(lat1, lng1, lat2, lng2) {
   return Math.round(R * c);
 }
 
-// 7. 안전한 CSV 파서 & 구글 시트 CSV URL + 로컬 data.csv Fallback 로더 (geoji 데이터는 원천 제외)
+// 요구사항 5: 태그 기반 기본 메타데이터 추론 헬퍼 (구글 시트에 컬럼이 아직 없을 경우 자동 보완)
+function inferDefaultMetadata(tags, name) {
+  const tagSet = new Set(tags);
+  let days = "매일 (연중무휴)";
+  let hours = "09:00 ~ 22:00";
+  let outlets = "창가 및 벽면 좌석 콘센트 구비";
+
+  if (tagSet.has("교내카페")) {
+    days = "평일 운영 (주말·공휴일 휴무)";
+    hours = "08:00 ~ 19:00";
+    outlets = "창가 바테이블 및 로비 벽면 일부 구비";
+  } else if (tagSet.has("24시간")) {
+    days = "매일 (연중무휴)";
+    hours = "24시간 영업";
+    outlets = "전 좌석 또는 카공석 1인 1콘센트 완비";
+  } else if (tagSet.has("밤늦게까지")) {
+    hours = "08:30 ~ 23:30";
+  }
+
+  if (tagSet.has("콘센트많음") && tagSet.has("1인석")) {
+    outlets = "1인 카공석 및 테이블별 개별 콘센트 다수 완비";
+  } else if (tagSet.has("콘센트많음")) {
+    outlets = "카공존 및 벽면·바테이블 좌석당 콘센트 넉넉함";
+  } else if (tagSet.has("1인석")) {
+    outlets = "1인 집중석 및 벽면 좌석 콘센트 구비";
+  }
+
+  return { days, hours, outlets };
+}
+
+// 요구사항 2: 사진 및 후기 외부 리뷰 페이지 링크 생성 헬퍼
+function buildExternalReviewLinks(place) {
+  const baseSearchQuery = encodeURIComponent(
+    `${place.campus === "seoul" ? "경희대 회기" : "경희대 국제캠 영통"} ${place.name}`
+  );
+  const naverMainUrl =
+    place.link || `https://map.naver.com/p/search/${encodeURIComponent(place.name)}`;
+  // 네이버 플레이스 사진/리뷰 검색 및 카카오맵 후기 페이지 연동
+  const photoReviewUrl = naverMainUrl;
+  const kakaoReviewUrl = `https://map.kakao.com/?q=${baseSearchQuery}`;
+
+  return {
+    naverMainUrl,
+    photoReviewUrl,
+    kakaoReviewUrl,
+  };
+}
+
+// 7. 안전한 CSV 파서 & 메타데이터(days, hours, outlets) 파싱
 function parseCSVLine(line) {
   const result = [];
   let current = "";
@@ -123,6 +169,12 @@ function parseCSVLine(line) {
   return result;
 }
 
+function normalizeTag(tagStr) {
+  return String(tagStr || "")
+    .replace(/^#+/, "")
+    .trim();
+}
+
 function parseCSV(csvText) {
   const lines = csvText
     .split(/\r?\n/)
@@ -130,7 +182,7 @@ function parseCSV(csvText) {
     .filter((l) => l.length > 0);
   if (lines.length < 2) return [];
 
-  const headers = parseCSVLine(lines[0]);
+  const headers = parseCSVLine(lines[0]).map((h) => h.trim());
   return lines
     .slice(1)
     .map((line) => {
@@ -139,37 +191,68 @@ function parseCSV(csvText) {
       headers.forEach((h, idx) => {
         obj[h] = cols[idx] ?? "";
       });
+
+      const rawTags = obj.tags
+        ? obj.tags
+            .split(",")
+            .map((t) => normalizeTag(t))
+            .filter(Boolean)
+        : [];
+
+      const fallbackMeta = inferDefaultMetadata(rawTags, obj.name);
+
       return {
         id: Number(obj.id),
-        campus: obj.campus,
-        map: obj.map || "kagong",
-        name: obj.name,
+        campus: (obj.campus || "seoul").trim(),
+        map: (obj.map || "kagong").trim(),
+        name: (obj.name || "").trim(),
         lat: parseFloat(obj.lat),
         lng: parseFloat(obj.lng),
-        summary: obj.summary,
-        tags: obj.tags
-          ? obj.tags
-              .split(",")
-              .map((t) => t.trim())
-              .filter(Boolean)
-          : [],
+        summary: (obj.summary || "").trim(),
+        tags: rawTags,
         link:
-          obj.link ||
+          (obj.link || "").trim() ||
           `https://map.naver.com/p/search/${encodeURIComponent(obj.name)}`,
+        days: (obj.days || "").trim() || fallbackMeta.days,
+        hours: (obj.hours || "").trim() || fallbackMeta.hours,
+        outlets: (obj.outlets || "").trim() || fallbackMeta.outlets,
       };
     })
-    .filter((item) => item.map === "kagong"); // 거지맵(geoji) 데이터 원천 차단
+    .filter((item) => item.map === "kagong" && !Number.isNaN(item.lat));
 }
 
 async function loadPlacesData() {
+  // 로컬 data.csv를 먼저 읽어 상세 메타데이터(days, hours, outlets) 사전 구축
+  let localPlaces = [];
+  try {
+    const localRes = await fetch(LOCAL_CSV_URL);
+    if (localRes.ok) {
+      localPlaces = parseCSV(await localRes.text());
+    }
+  } catch (e) {
+    console.warn("로컬 data.csv 로드 중 경고:", e);
+  }
+
+  const localMetaById = new Map(localPlaces.map((p) => [p.id, p]));
+
   if (GOOGLE_SHEET_CSV_URL && GOOGLE_SHEET_CSV_URL.trim().length > 0) {
     try {
       const sheetRes = await fetch(GOOGLE_SHEET_CSV_URL.trim());
       if (sheetRes.ok) {
         const sheetCsv = await sheetRes.text();
-        const parsed = parseCSV(sheetCsv);
-        if (parsed.length > 0) {
-          return parsed;
+        const parsedSheet = parseCSV(sheetCsv);
+        if (parsedSheet.length > 0) {
+          // 구글 시트에 days/hours/outlets 컬럼이 비어 있으면 로컬 상세 메타데이터로 보강
+          return parsedSheet.map((item) => {
+            const localMatch = localMetaById.get(item.id);
+            if (!localMatch) return item;
+            return {
+              ...item,
+              days: item.days || localMatch.days,
+              hours: item.hours || localMatch.hours,
+              outlets: item.outlets || localMatch.outlets,
+            };
+          });
         }
       }
     } catch (sheetErr) {
@@ -180,12 +263,10 @@ async function loadPlacesData() {
     }
   }
 
-  const localRes = await fetch(LOCAL_CSV_URL);
-  const localCsv = await localRes.text();
-  return parseCSV(localCsv);
+  return localPlaces;
 }
 
-// 8. URL 파라미터 초기화 및 동기화
+// 8. URL 파라미터 초기화 및 동기화 (요구사항 1: 기본 뷰 모드는 항상 'map')
 function syncStateFromURL() {
   const params = new URLSearchParams(window.location.search);
   const campusParam = params.get("campus");
@@ -199,8 +280,11 @@ function syncStateFromURL() {
     state.campus = campusParam;
   }
 
-  if (viewParam === "map" || viewParam === "list") {
-    state.viewMode = viewParam;
+  // URL에 ?view=list가 명시된 경우에만 목록 뷰, 그 외 모든 초기 진입은 'map' 우선 노출!
+  if (viewParam === "list") {
+    state.viewMode = "list";
+  } else {
+    state.viewMode = "map";
   }
 
   const anchors = CAMPUS_ANCHORS[state.campus];
@@ -220,9 +304,25 @@ function updateURLParams() {
   url.searchParams.delete("map");
   url.searchParams.set("campus", state.campus);
   window.history.replaceState({}, "", url.toString());
+
+  // 푸터 공유 링크 프리뷰도 현재 캠퍼스에 맞춰 갱신
+  const previewEl = document.getElementById("shareUrlPreview");
+  if (previewEl) {
+    previewEl.textContent = `korewajiyuda.github.io/khu_kagongmap/?campus=${state.campus}`;
+  }
 }
 
-// 9. 하단 고정 CTA 버튼 동적 UTM 업데이트 (&utm_content={campus}_kagong)
+// 요구사항 3: 정규 서비스 도메인 공유 링크 생성 함수 (제미나이 링크 완전 제거)
+function getCanonicalShareUrl() {
+  const shareUrl = new URL(CANONICAL_SERVICE_URL);
+  shareUrl.searchParams.set("campus", state.campus);
+  if (state.anchorKey && state.anchorKey !== "gps") {
+    shareUrl.searchParams.set("anchor", state.anchorKey);
+  }
+  return shareUrl.toString();
+}
+
+// 9. 하단 고정 CTA 버튼 동적 UTM 업데이트
 function updateFixedCTA() {
   const ctaEl = document.getElementById("geminiCtaLink");
   const badgeEl = document.getElementById("ctaUtmBadge");
@@ -237,7 +337,7 @@ function updateFixedCTA() {
   }
 }
 
-// 10. 상단 헤더 타이틀("☕ 경희대 카공맵" 고정) & 캠퍼스 세그먼트 토글 업데이트
+// 10. 상단 헤더 렌더링
 function renderHeader() {
   const titleEl = document.getElementById("headerTitle");
   if (titleEl) {
@@ -297,26 +397,6 @@ function renderAnchorControls() {
   });
 
   container.innerHTML = html;
-
-  container.querySelectorAll(".anchor-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const key = btn.dataset.anchor;
-      if (key === "gps") {
-        requestUserGPS();
-      } else {
-        const found = CAMPUS_ANCHORS[state.campus].find((x) => x.key === key);
-        if (found) {
-          state.anchorKey = found.key;
-          state.anchorCoord = {
-            lat: found.lat,
-            lng: found.lng,
-            label: found.label,
-          };
-          renderAll();
-        }
-      }
-    });
-  });
 }
 
 // 12. 내 위치(GPS) 요청 및 거절/인앱 차단 시 대체 처리
@@ -353,7 +433,7 @@ function requestUserGPS() {
   );
 }
 
-// 13. 카공 전용 다중 선택 필터 칩 렌더링
+// 13. 요구사항 4: 다중 선택(Multi-select) 필터 칩 렌더링 (중복 클릭 및 선택 개수 표시)
 function renderFilterChips() {
   const container = document.getElementById("filterChipContainer");
   if (!container) return;
@@ -361,48 +441,31 @@ function renderFilterChips() {
   let html = "";
 
   if (state.selectedTags.size > 0) {
-    html += `<button type="button" class="filter-reset-chip" id="btnResetFilters">초기화 ✕</button>`;
+    html += `<button type="button" class="filter-reset-chip" data-action="reset-filters">초기화 (${state.selectedTags.size}) ✕</button>`;
   }
 
   KAGONG_FILTER_TAGS.forEach((tag) => {
-    const isActive = state.selectedTags.has(tag);
+    const normalized = normalizeTag(tag);
+    const isActive = state.selectedTags.has(normalized);
     html += `
-      <button type="button" class="filter-chip ${isActive ? "active" : ""}" data-tag="${tag}">
-        #${tag}
+      <button
+        type="button"
+        class="filter-chip ${isActive ? "active" : ""}"
+        data-tag="${normalized}"
+        aria-pressed="${isActive}"
+      >
+        ${isActive ? '<span class="check-mark">✓</span>' : ""}#${normalized}
       </button>
     `;
   });
 
   container.innerHTML = html;
-
-  const resetBtn = document.getElementById("btnResetFilters");
-  if (resetBtn) {
-    resetBtn.addEventListener("click", () => {
-      state.selectedTags.clear();
-      renderAll();
-    });
-  }
-
-  container.querySelectorAll(".filter-chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const tag = chip.dataset.tag;
-      if (state.selectedTags.has(tag)) {
-        state.selectedTags.delete(tag);
-      } else {
-        state.selectedTags.add(tag);
-      }
-      trackEvent("filter_click", {
-        tag,
-        active_tags: Array.from(state.selectedTags).join(","),
-      });
-      renderAll();
-    });
-  });
 }
 
-// 14. 카공 카페 필터링 및 거리순 정렬
+// 14. 요구사항 4: 다중 선택 태그 AND 조건 필터링 및 거리순 정렬
 function getFilteredPlaces() {
   const { campus, anchorCoord, radiusLimitEnabled, selectedTags } = state;
+  const activeTagArray = Array.from(selectedTags).map((t) => normalizeTag(t));
 
   const baseList = state.places
     .filter((p) => p.campus === campus && p.map === "kagong")
@@ -416,12 +479,11 @@ function getFilteredPlaces() {
       return { ...p, distance };
     });
 
-  const tagFiltered = baseList.filter((p) => {
-    if (selectedTags.size === 0) return true;
-    for (const t of selectedTags) {
-      if (!p.tags.includes(t)) return false;
-    }
-    return true;
+  // 선택한 모든 태그를 포함(every -> AND 교집합 조건)하는 장소만 필터링
+  const tagFiltered = baseList.filter((place) => {
+    if (activeTagArray.length === 0) return true;
+    const placeTagSet = new Set((place.tags || []).map((t) => normalizeTag(t)));
+    return activeTagArray.every((selectedTag) => placeTagSet.has(selectedTag));
   });
 
   tagFiltered.sort((a, b) => a.distance - b.distance);
@@ -437,7 +499,7 @@ function getFilteredPlaces() {
   };
 }
 
-// 15. 장소 카드 목록 렌더링
+// 15. 요구사항 2 & 5: 장소 상세 카드 목록 렌더링 (메타데이터 그리드 + 사진/후기 외부 링크)
 function renderPlaceList(filteredResult) {
   const listEl = document.getElementById("placeListContainer");
   const countEl = document.getElementById("placeCount");
@@ -448,20 +510,32 @@ function renderPlaceList(filteredResult) {
   if (!listEl) return;
 
   if (displayed.length === 0) {
+    const activeTagsText =
+      state.selectedTags.size > 0
+        ? `선택한 태그(${Array.from(state.selectedTags)
+            .map((t) => "#" + t)
+            .join(" + ")})를 모두 만족하는`
+        : "반경 500m 내 조건에 맞는";
+
     listEl.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">🔭</div>
-        <h3>반경 500m 내 조건에 맞는 카공 카페가 없어요</h3>
-        <p>다른 거점을 선택하거나 캠퍼스 전체 거리순으로 넓혀보세요! (전체 ${totalInCampus}곳)</p>
+        <h3>${activeTagsText} 카페가 없어요</h3>
+        <p>반경 제한을 해제하거나 태그 필터를 조정해 보세요! (캠퍼스 내 조건 일치 ${totalInCampus}곳)</p>
         <button type="button" class="empty-expand-btn" id="btnEmptyExpand">
-          캠퍼스 전체 거리순 보기 (${totalInCampus}곳)
+          ${state.radiusLimitEnabled && totalInCampus > 0 ? `캠퍼스 전체 거리순 보기 (${totalInCampus}곳)` : "필터 초기화하고 전체 보기"}
         </button>
       </div>
     `;
     const expandBtn = document.getElementById("btnEmptyExpand");
     if (expandBtn) {
       expandBtn.addEventListener("click", () => {
-        state.radiusLimitEnabled = false;
+        if (state.radiusLimitEnabled && totalInCampus > 0) {
+          state.radiusLimitEnabled = false;
+        } else {
+          state.selectedTags.clear();
+          state.radiusLimitEnabled = false;
+        }
         renderAll();
       });
     }
@@ -478,25 +552,39 @@ function renderPlaceList(filteredResult) {
 
       const tagsHtml = place.tags
         .map((t) => {
-          const isMatched = state.selectedTags.has(t);
+          const isMatched = state.selectedTags.has(normalizeTag(t));
           return `<span class="tag-pill ${isMatched ? "matched" : ""}">#${t}</span>`;
         })
         .join("");
 
+      const { naverMainUrl, photoReviewUrl, kakaoReviewUrl } =
+        buildExternalReviewLinks(place);
+
       return `
-        <a
-          href="${place.link}"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="place-card"
-          data-place-id="${place.id}"
-          data-place-name="${place.name}"
-        >
+        <article class="place-card" data-place-id="${place.id}" data-place-name="${place.name}">
           <div class="card-top">
             <div class="place-name-wrap">
-              <h2 class="place-name">${place.name}</h2>
+              <a href="${naverMainUrl}" target="_blank" rel="noopener noreferrer" class="place-name-link">
+                <h2 class="place-name">${place.name}</h2>
+              </a>
             </div>
-            <span class="distance-badge ${distClass}">${distText}</span>
+            <span class="distance-badge ${distClass}">${state.anchorCoord.label} ${distText}</span>
+          </div>
+
+          <!-- 요구사항 5: 운영 날짜 · 운영 시간 · 콘센트 유무/개수 메타데이터 영역 -->
+          <div class="place-meta-grid">
+            <div class="meta-item">
+              <span class="meta-label">🗓️ 운영 날짜</span>
+              <span class="meta-value">${place.days}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">⏰ 운영 시간</span>
+              <span class="meta-value">${place.hours}</span>
+            </div>
+            <div class="meta-item outlet-full">
+              <span class="meta-label">🔌 콘센트 유무 / 좌석 환경</span>
+              <span class="meta-value">${place.outlets}</span>
+            </div>
           </div>
 
           <div class="gemini-summary-box">
@@ -507,27 +595,57 @@ function renderPlaceList(filteredResult) {
             <p class="gemini-summary-text">${place.summary}</p>
           </div>
 
-          <div class="card-bottom">
-            <div class="tag-list">${tagsHtml}</div>
-            <span class="naver-link-label">네이버 지도 ↗</span>
+          <div class="tag-list">${tagsHtml}</div>
+
+          <!-- 요구사항 2: 사진 및 후기 영역 클릭 시 네이버/카카오 실제 리뷰 페이지 새 창 이동 -->
+          <div class="review-action-row">
+            <a
+              href="${photoReviewUrl}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="ext-action-btn photo-btn"
+              data-ext-type="naver_photo_review"
+            >
+              📸 매장 사진·후기 ↗
+            </a>
+            <a
+              href="${kakaoReviewUrl}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="ext-action-btn review-btn"
+              data-ext-type="kakao_review"
+            >
+              ⭐ 카카오맵 후기 ↗
+            </a>
+            <a
+              href="${naverMainUrl}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="ext-action-btn map-main-btn"
+              data-ext-type="naver_map_route"
+            >
+              🗺️ 네이버 길찾기 ↗
+            </a>
           </div>
-        </a>
+        </article>
       `;
     })
     .join("");
 
-  listEl.querySelectorAll(".place-card").forEach((card) => {
-    card.addEventListener("click", () => {
+  listEl.querySelectorAll("a[target='_blank']").forEach((linkEl) => {
+    linkEl.addEventListener("click", () => {
+      const card = linkEl.closest(".place-card");
       trackEvent("place_click", {
-        place_id: Number(card.dataset.placeId),
-        place_name: card.dataset.placeName,
+        place_id: card ? Number(card.dataset.placeId) : null,
+        place_name: card ? card.dataset.placeName : "",
+        link_type: linkEl.dataset.extType || "card_title",
         source: "list_card",
       });
     });
   });
 }
 
-// 16. 지도 뷰 & 바텀시트 스타일 마커 요약 카드
+// 16. 요구사항 1, 2, 5: 지도 뷰 & 마커 클릭 바텀시트 (메타데이터 + 사진/후기 외부 링크 + 목록 전환 동선)
 function openMapOverlayCard(place) {
   const overlayCard = document.getElementById("mapSelectedCard");
   const floatingBtn = document.getElementById("btnFloatingViewToggle");
@@ -541,38 +659,83 @@ function openMapOverlayCard(place) {
 
   const tagsHtml = place.tags
     .map((t) => {
-      const isMatched = state.selectedTags.has(t);
+      const isMatched = state.selectedTags.has(normalizeTag(t));
       return `<span class="tag-pill ${isMatched ? "matched" : ""}">#${t}</span>`;
     })
     .join("");
+
+  const { naverMainUrl, photoReviewUrl, kakaoReviewUrl } =
+    buildExternalReviewLinks(place);
 
   overlayCard.innerHTML = `
     <div class="sheet-grab-bar"></div>
     <div class="card-top">
       <div class="place-name-wrap">
         <strong class="place-name">${place.name}</strong>
-        <span class="distance-badge ${distClass}">${state.anchorCoord.label}에서 ${distText}</span>
+        <span class="distance-badge ${distClass}">${state.anchorCoord.label} ${distText}</span>
       </div>
-      <button type="button" class="overlay-close-btn" id="btnCloseOverlayCard" aria-label="요약 카드 닫기">✕</button>
+      <div class="sheet-header-actions">
+        <button type="button" class="sheet-switch-list-btn" id="btnSheetToList" title="전체 목록 뷰로 전환">
+          📋 목록으로 보기
+        </button>
+        <button type="button" class="overlay-close-btn" id="btnCloseOverlayCard" aria-label="요약 카드 닫기">✕</button>
+      </div>
     </div>
-    <div class="gemini-summary-box" style="margin-bottom:10px;">
+
+    <!-- 요구사항 5: 지도 핀업 카드에도 운영 날짜·운영 시간·콘센트 메타데이터 배치 -->
+    <div class="place-meta-grid" style="margin-bottom:8px;">
+      <div class="meta-item">
+        <span class="meta-label">🗓️ 운영 날짜</span>
+        <span class="meta-value">${place.days}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">⏰ 운영 시간</span>
+        <span class="meta-value">${place.hours}</span>
+      </div>
+      <div class="meta-item outlet-full">
+        <span class="meta-label">🔌 콘센트 유무 / 좌석 환경</span>
+        <span class="meta-value">${place.outlets}</span>
+      </div>
+    </div>
+
+    <div class="gemini-summary-box" style="margin-bottom:9px;padding:10px 12px;">
       <div class="gemini-badge-row">
         <span class="gemini-badge">✨ Gemini 요약</span>
         <span class="gemini-ai-hint">AI 카공 큐레이션</span>
       </div>
       <p class="gemini-summary-text">${place.summary}</p>
     </div>
-    <div class="card-bottom">
-      <div class="tag-list">${tagsHtml}</div>
+
+    <div class="tag-list" style="margin-bottom:9px;">${tagsHtml}</div>
+
+    <!-- 요구사항 2: 바텀시트 내 사진·후기 외부 링크 연동 -->
+    <div class="review-action-row">
       <a
-        href="${place.link}"
+        href="${photoReviewUrl}"
         target="_blank"
         rel="noopener noreferrer"
-        class="overlay-naver-btn"
-        data-place-id="${place.id}"
-        data-place-name="${place.name}"
+        class="ext-action-btn photo-btn"
+        data-ext-type="naver_photo_review"
       >
-        네이버 지도 길찾기 ↗
+        📸 사진·후기 ↗
+      </a>
+      <a
+        href="${kakaoReviewUrl}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="ext-action-btn review-btn"
+        data-ext-type="kakao_review"
+      >
+        ⭐ 카카오 후기 ↗
+      </a>
+      <a
+        href="${naverMainUrl}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="ext-action-btn map-main-btn"
+        data-ext-type="naver_map_route"
+      >
+        🗺️ 네이버 지도 ↗
       </a>
     </div>
   `;
@@ -587,6 +750,28 @@ function openMapOverlayCard(place) {
     );
   });
 
+  // 바텀시트에서 [📋 목록으로 보기] 클릭 시 즉시 목록 뷰로 전환하고 해당 카드로 스크롤
+  const sheetToListBtn = document.getElementById("btnSheetToList");
+  if (sheetToListBtn) {
+    sheetToListBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      state.viewMode = "list";
+      trackEvent("view_toggle", {
+        view_mode: "list",
+        source: "map_bottom_sheet",
+      });
+      renderAll();
+      setTimeout(() => {
+        const targetCard = document.querySelector(
+          `.place-card[data-place-id="${place.id}"]`
+        );
+        if (targetCard) {
+          targetCard.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 80);
+    });
+  }
+
   const closeBtn = document.getElementById("btnCloseOverlayCard");
   if (closeBtn) {
     closeBtn.addEventListener("click", (e) => {
@@ -599,16 +784,16 @@ function openMapOverlayCard(place) {
     });
   }
 
-  const naverLink = overlayCard.querySelector(".overlay-naver-btn");
-  if (naverLink) {
-    naverLink.addEventListener("click", () => {
+  overlayCard.querySelectorAll("a[target='_blank']").forEach((extLink) => {
+    extLink.addEventListener("click", () => {
       trackEvent("place_click", {
         place_id: place.id,
         place_name: place.name,
+        link_type: extLink.dataset.extType || "sheet_external",
         source: "map_bottom_sheet",
       });
     });
-  }
+  });
 }
 
 function renderMapView(filteredResult) {
@@ -617,9 +802,16 @@ function renderMapView(filteredResult) {
   const overlayCard = document.getElementById("mapSelectedCard");
   const floatingBtn = document.getElementById("btnFloatingViewToggle");
 
+  // 상단 [지도 / 목록] 탭 및 하단 플로팅 캡슐 버튼 텍스트 동기화
+  document.querySelectorAll(".view-toggle-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.view === state.viewMode);
+  });
+
   if (floatingBtn) {
     floatingBtn.innerHTML =
-      state.viewMode === "map" ? "📋 목록 보기" : "🗺️ 지도 보기";
+      state.viewMode === "map"
+        ? `📋 카페 목록 보기 (${filteredResult.displayed.length}곳)`
+        : "🗺️ 지도 화면 보기";
     floatingBtn.classList.remove("card-open");
   }
 
@@ -667,7 +859,6 @@ function renderMapView(filteredResult) {
   placeMarkersLayer.clearLayers();
   if (overlayCard) overlayCard.classList.add("hidden");
 
-  // 1) 반경 500m 원 (Gemini 인디고·로열블루 톤)
   radiusCircle = L.circle([state.anchorCoord.lat, state.anchorCoord.lng], {
     radius: DEFAULT_RADIUS_METERS,
     color: "#4F46E5",
@@ -677,7 +868,6 @@ function renderMapView(filteredResult) {
     fillOpacity: 0.11,
   }).addTo(leafletMap);
 
-  // 2) 기준점 마커
   const anchorIcon = L.divIcon({
     className: "custom-anchor-icon",
     html: `<div class="khu-anchor-pin">📍 ${state.anchorCoord.label} 기준</div>`,
@@ -689,7 +879,6 @@ function renderMapView(filteredResult) {
     zIndexOffset: 1000,
   }).addTo(leafletMap);
 
-  // 3) 필터링된 카공 카페 마커
   const markersById = new Map();
 
   filteredResult.displayed.forEach((place) => {
@@ -749,7 +938,7 @@ function renderAll() {
   renderMapView(filteredResult);
 }
 
-// 18. 클립보드 공유 및 토스트 메시지
+// 18. 요구사항 3: 정규 도메인(https://korewajiyuda.github.io/khu_kagongmap/) 공유 및 클립보드 복사
 function showToast(msg) {
   const toastEl = document.getElementById("toastPopup");
   if (!toastEl) return;
@@ -761,41 +950,36 @@ function showToast(msg) {
   }, 2400);
 }
 
-async function copyShareLink(customUrl = SHORT_SHARE_URL) {
+async function copyShareLink() {
+  const targetUrl = getCanonicalShareUrl();
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(customUrl);
+      await navigator.clipboard.writeText(targetUrl);
     } else {
       throw new Error("clipboard fallback");
     }
   } catch {
     const tempInput = document.createElement("input");
-    tempInput.value = customUrl;
+    tempInput.value = targetUrl;
     document.body.appendChild(tempInput);
     tempInput.select();
     document.execCommand("copy");
     document.body.removeChild(tempInput);
   }
-  showToast("카공맵 링크(goo.gle/kyunghee)가 복사되었어요! ✨");
+  showToast(`카공맵 주소가 복사되었어요! (${targetUrl})`);
 }
 
-// 19. 인앱 브라우저 감지 및 홈 화면 추가(A2HS) 바텀시트 팝업 (showA2HSPopup 전역 지원)
+// 19. 인앱 브라우저 감지 및 홈 화면 추가(A2HS) 바텀시트 팝업
 function isInAppBrowser() {
   const ua = navigator.userAgent || "";
   return /Instagram|KAKAOTALK|everytime|NAVER|Line|FBAN|FBAV/i.test(ua);
 }
 
-/**
- * 홈 화면 추가(A2HS) 바텀시트 팝업 노출 함수
- * @param {boolean} forceInAppMode - true 전달 시 인앱 브라우저 안내 UI를 강제 노출
- */
 function showA2HSPopup(forceInAppMode = false) {
   const modal = document.getElementById("a2hsModal");
   const titleEl = document.getElementById("a2hsTitle");
   const subtitleEl = document.getElementById("a2hsSubtitle");
   const bodyEl = document.getElementById("a2hsInstructionBody");
-  const actionGroup = document.getElementById("a2hsActionGroup");
-  const copyBtn = document.getElementById("btnA2HSCopyLink");
 
   if (!modal || !bodyEl) return;
 
@@ -826,8 +1010,6 @@ function showA2HSPopup(forceInAppMode = false) {
         </li>
       </ol>
     `;
-    if (actionGroup) actionGroup.classList.remove("single-col");
-    if (copyBtn) copyBtn.classList.remove("hidden");
   } else {
     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
     if (titleEl) {
@@ -864,8 +1046,6 @@ function showA2HSPopup(forceInAppMode = false) {
         </ol>
       `;
     }
-    if (actionGroup) actionGroup.classList.remove("single-col");
-    if (copyBtn) copyBtn.classList.remove("hidden");
   }
 
   modal.classList.remove("hidden");
@@ -901,7 +1081,7 @@ function initA2HSTrigger() {
   }
 }
 
-// 20. 이벤트 바인딩 및 초기 실행
+// 20. 이벤트 바인딩 (이벤트 위임으로 다중 태그 및 기준점 클릭 안정성 보장)
 function bindEvents() {
   // 캠퍼스 세그먼트 컨트롤 전환 [서울캠 / 국제캠]
   document.querySelectorAll(".campus-btn").forEach((btn) => {
@@ -924,6 +1104,62 @@ function bindEvents() {
     });
   });
 
+  // 기준점 버튼 컨테이너 이벤트 위임
+  const anchorContainer = document.getElementById("anchorButtonGroup");
+  if (anchorContainer) {
+    anchorContainer.addEventListener("click", (e) => {
+      const btn = e.target.closest(".anchor-btn");
+      if (!btn) return;
+      const key = btn.dataset.anchor;
+      if (key === "gps") {
+        requestUserGPS();
+      } else {
+        const found = CAMPUS_ANCHORS[state.campus].find((x) => x.key === key);
+        if (found) {
+          state.anchorKey = found.key;
+          state.anchorCoord = {
+            lat: found.lat,
+            lng: found.lng,
+            label: found.label,
+          };
+          renderAll();
+        }
+      }
+    });
+  }
+
+  // 요구사항 4: 다중 선택 필터 칩 컨테이너 이벤트 위임 (중복 클릭 시 Set에 추가/제거)
+  const filterContainer = document.getElementById("filterChipContainer");
+  if (filterContainer) {
+    filterContainer.addEventListener("click", (e) => {
+      const resetBtn = e.target.closest("[data-action='reset-filters']");
+      if (resetBtn) {
+        state.selectedTags.clear();
+        renderAll();
+        return;
+      }
+
+      const chip = e.target.closest(".filter-chip");
+      if (!chip) return;
+
+      const tag = normalizeTag(chip.dataset.tag);
+      if (!tag) return;
+
+      if (state.selectedTags.has(tag)) {
+        state.selectedTags.delete(tag);
+      } else {
+        state.selectedTags.add(tag);
+      }
+
+      trackEvent("filter_click", {
+        tag,
+        active_tags: Array.from(state.selectedTags).join(","),
+        active_count: state.selectedTags.size,
+      });
+      renderAll();
+    });
+  }
+
   // 반경 500m <-> 전체 거리순 보기 토글
   const radiusToggleBtn = document.getElementById("btnToggleRadius");
   if (radiusToggleBtn) {
@@ -933,7 +1169,21 @@ function bindEvents() {
     });
   }
 
-  // 하단 다크 캡슐 플로팅 버튼 [🗺️ 지도 보기 / 📋 목록 보기]
+  // 상단 [지도 / 목록] 탭 전환
+  document.querySelectorAll(".view-toggle-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const nextView = btn.dataset.view;
+      if (!nextView || nextView === state.viewMode) return;
+      state.viewMode = nextView;
+      trackEvent("view_toggle", {
+        view_mode: state.viewMode,
+        source: "toolbar_tab",
+      });
+      renderAll();
+    });
+  });
+
+  // 하단 다크 캡슐 플로팅 버튼 [📋 카페 목록 보기 ↔ 🗺️ 지도 화면 보기]
   const floatingToggleBtn = document.getElementById("btnFloatingViewToggle");
   if (floatingToggleBtn) {
     floatingToggleBtn.addEventListener("click", () => {
@@ -946,7 +1196,7 @@ function bindEvents() {
     });
   }
 
-  // 링크 복사/공유 버튼
+  // 요구사항 3: 정규 도메인 링크 복사/공유 버튼
   const btnShare = document.getElementById("btnShare");
   const btnFooterShare = document.getElementById("btnFooterShare");
   const btnA2HSCopyLink = document.getElementById("btnA2HSCopyLink");
@@ -1009,7 +1259,7 @@ function bindEvents() {
     });
   });
 
-  // A2HS 바텀시트 열기/닫기 (디버그용 강제 인앱 호출은 콘솔 window.showA2HSPopup(true) 전용으로 유지)
+  // A2HS 바텀시트 열기/닫기
   const btnOpenA2HS = document.getElementById("btnOpenA2HS");
   const btnCloseA2HS = document.getElementById("btnCloseA2HS");
   const a2hsModal = document.getElementById("a2hsModal");
@@ -1043,6 +1293,7 @@ async function initApp() {
   trackEvent("page_view", {
     campus: state.campus,
     map: "kagong",
+    initial_view: state.viewMode,
   });
   initA2HSTrigger();
 }

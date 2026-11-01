@@ -1,5 +1,4 @@
 :root {
-  /* PART 1. 타이포그래피 & 컬러 시스템 (Toss·Catchtable + Google Gemini Ambassador) */
   --bg-body: #F2F4F7;
   --bg-shell: #F8FAFC;
   --surface: #FFFFFF;
@@ -16,7 +15,6 @@
 
   --dark-navy: #0F172A;
 
-  /* Gemini 시그니처 그라데이션 */
   --gemini-gradient: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #DB2777 100%);
   --gemini-box-bg: linear-gradient(135deg, #F5F3FF 0%, #EFF6FF 100%);
   --gemini-box-border: #E0E7FF;
@@ -43,7 +41,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 모바일 퍼스트 컨테이너 (기준 375px, 최대 480px 중앙 정렬, 배경 #F8FAFC) */
 .app-shell {
   width: 100%;
   max-width: 480px;
@@ -58,7 +55,7 @@ body {
   overflow-x: hidden;
 }
 
-/* 2. 상단 헤더 & 컨트롤 바 (심플 & 모던, sticky + 반투명 블러) */
+/* 상단 헤더 & 컨트롤 바 */
 .app-header {
   position: sticky;
   top: 0;
@@ -70,7 +67,6 @@ body {
   border-bottom: 1px solid rgba(226, 232, 240, 0.8);
 }
 
-/* 헤더 1단: 좌측 "☕ 경희대 카공맵", 우측 [서울캠 / 국제캠] 세그먼트 토글 + [🔗 공유] 아이콘 버튼 */
 .header-top {
   display: flex;
   align-items: center;
@@ -94,7 +90,6 @@ body {
   gap: 6px;
 }
 
-/* [서울캠 / 국제캠] 캡슐형 세그먼트 토글 (회색 배경 안에 흰색 활성 알약 탭) */
 .segmented-campus {
   display: inline-flex;
   background: #EDF1F7;
@@ -134,7 +129,7 @@ body {
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
-/* 헤더 2단: 기준점 & 카공 필터 칩 가로 스크롤 알약 바 */
+/* 헤더 2단: 기준점 & 다중 선택 필터 칩 */
 .header-controls {
   display: flex;
   flex-direction: column;
@@ -171,9 +166,9 @@ body {
   align-items: center;
   gap: 4px;
   white-space: nowrap;
+  user-select: none;
 }
 
-/* 활성화된 칩은 다크 네이비(#0F172A) 배경에 흰 글씨로 강조 */
 .anchor-btn.active,
 .filter-chip.active {
   background: var(--dark-navy);
@@ -182,34 +177,43 @@ body {
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
 }
 
+.filter-chip .check-mark {
+  font-size: 10.5px;
+  color: #60A5FA;
+  font-weight: 900;
+}
+
 .filter-reset-chip {
   flex-shrink: 0;
   border: 1px dashed #CBD5E1;
-  background: #FFFFFF;
-  color: var(--text-muted);
+  background: #FFF1F2;
+  color: #E11D48;
+  border-color: #FECDD3;
   font-family: inherit;
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 800;
   padding: 5px 10px;
   border-radius: 9999px;
   cursor: pointer;
 }
 
-/* 툴바 (기준점 상태 + 카페 개수 + 반경 토글) */
+/* 툴바 (기준점 상태 + 카페 개수 + 반경 토글 + 지도/목록 토글) */
 .toolbar-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
   padding: 10px 16px 8px;
 }
 
 .result-count {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12.5px;
+  gap: 4px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .result-count strong {
@@ -230,9 +234,9 @@ body {
 }
 
 .radius-pill {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: 9999px;
   background: var(--royal-blue-bg);
   color: var(--royal-blue);
@@ -245,16 +249,23 @@ body {
   border-color: #DDD6FE;
 }
 
+.toolbar-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .radius-toggle-btn {
   border: 1px solid var(--border-subtle);
   background: #FFFFFF;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: 9999px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .radius-toggle-btn.active {
@@ -263,7 +274,32 @@ body {
   border-color: var(--dark-navy);
 }
 
-/* 3. 장소 카드 UI 고도화 */
+.view-mode-group {
+  display: inline-flex;
+  background: #EDF1F7;
+  padding: 2px;
+  border-radius: 9999px;
+}
+
+.view-toggle-btn {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 3.5px 9px;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+.view-toggle-btn.active {
+  background: #FFFFFF;
+  color: var(--text-primary);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+/* 메인 컨텐츠 & 장소 카드 UI */
 .main-content {
   flex: 1;
   padding: 2px 16px 16px;
@@ -277,8 +313,6 @@ body {
 
 .place-card {
   display: block;
-  text-decoration: none;
-  color: inherit;
   background: var(--surface);
   border: 1px solid var(--border-card);
   border-radius: 18px;
@@ -287,16 +321,12 @@ body {
   transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
-.place-card:active {
-  transform: scale(0.99);
-}
-
 .card-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 11px;
+  margin-bottom: 10px;
 }
 
 .place-name-wrap {
@@ -304,6 +334,11 @@ body {
   align-items: center;
   gap: 7px;
   flex-wrap: wrap;
+}
+
+.place-name-link {
+  text-decoration: none;
+  color: inherit;
 }
 
 .place-name {
@@ -314,7 +349,6 @@ body {
   line-height: 1.35;
 }
 
-/* 거리 배지 (연한 블루 배경 #EFF6FF + 파란 텍스트 #2563EB, border-radius: 8px) */
 .distance-badge {
   flex-shrink: 0;
   font-size: 12px;
@@ -331,13 +365,58 @@ body {
   background: #F1F5F9;
 }
 
-/* ✨Gemini 요약 박스 (연보라~연파랑 파스텔 그라데이션) */
+/* 요구사항 5: 운영 날짜 · 운영 시간 · 콘센트 유무/개수 메타데이터 그리드 UI */
+.place-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.meta-item {
+  background: #F8FAFC;
+  border: 1px solid #EEF2F6;
+  border-radius: 10px;
+  padding: 7px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.meta-item.outlet-full {
+  grid-column: 1 / -1;
+  background: #F0FDF4;
+  border-color: #DCFCE7;
+}
+
+.meta-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.meta-item.outlet-full .meta-label {
+  color: #15803D;
+}
+
+.meta-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.35;
+  word-break: keep-all;
+}
+
+/* ✨Gemini 요약 박스 */
 .gemini-summary-box {
   background: var(--gemini-box-bg);
   border: 1px solid var(--gemini-box-border);
   border-radius: 12px;
   padding: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 11px;
 }
 
 .gemini-badge-row {
@@ -369,24 +448,19 @@ body {
 }
 
 .gemini-summary-text {
-  font-size: 13.5px;
+  font-size: 13px;
   color: #1E293B;
-  line-height: 1.5;
+  line-height: 1.48;
   font-weight: 500;
   word-break: keep-all;
 }
 
-.card-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
+/* 태그 목록 */
 .tag-list {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
+  margin-bottom: 11px;
 }
 
 .tag-pill {
@@ -404,14 +478,52 @@ body {
   font-weight: 700;
 }
 
-.naver-link-label {
-  flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--royal-blue);
+/* 요구사항 2: 사진 및 후기 영역 외부 링크 연동 버튼 바 */
+.review-action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.15fr;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #F1F5F9;
+}
+
+.ext-action-btn {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  justify-content: center;
+  gap: 4px;
+  text-decoration: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: #F8FAFC;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.ext-action-btn:active {
+  transform: scale(0.98);
+}
+
+.ext-action-btn.photo-btn {
+  background: #EFF6FF;
+  border-color: #DBEAFE;
+  color: #1D4ED8;
+}
+
+.ext-action-btn.review-btn {
+  background: #FEF9C3;
+  border-color: #FEF08A;
+  color: #854D0E;
+}
+
+.ext-action-btn.map-main-btn {
+  background: var(--dark-navy);
+  border-color: var(--dark-navy);
+  color: #FFFFFF;
 }
 
 /* 빈 상태 안내 */
@@ -454,7 +566,7 @@ body {
   cursor: pointer;
 }
 
-/* 4. 지도 뷰 & 바텀시트 요약 카드 & 플로팅 버튼 */
+/* 지도 뷰 & 바텀시트 요약 카드 */
 .hidden {
   display: none !important;
 }
@@ -510,7 +622,6 @@ body {
   margin-left: 4px;
 }
 
-/* 커스텀 기준점 & 카페 마커 핀 */
 .custom-anchor-icon,
 .custom-place-divicon {
   background: transparent;
@@ -573,7 +684,7 @@ body {
   z-index: 550;
   background: #FFFFFF;
   border-radius: 22px;
-  padding: 10px 18px 16px;
+  padding: 10px 16px 15px;
   box-shadow: var(--shadow-sheet);
   border: 1px solid var(--gemini-box-border);
   animation: sheetSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1);
@@ -584,7 +695,7 @@ body {
   height: 4px;
   background: #CBD5E1;
   border-radius: 9999px;
-  margin: 0 auto 10px;
+  margin: 0 auto 8px;
 }
 
 @keyframes sheetSlideUp {
@@ -596,6 +707,24 @@ body {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
+}
+
+.sheet-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sheet-switch-list-btn {
+  border: 1px solid var(--border-subtle);
+  background: #F8FAFC;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
 }
 
 .overlay-close-btn {
@@ -614,23 +743,7 @@ body {
   flex-shrink: 0;
 }
 
-.overlay-naver-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  background: var(--royal-blue);
-  color: #FFFFFF;
-  text-decoration: none;
-  font-size: 12px;
-  font-weight: 800;
-  padding: 7px 12px;
-  border-radius: 10px;
-  flex-shrink: 0;
-  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
-}
-
-/* 화면 하단 CTA 바로 위에 떠 있는 트렌디한 다크 캡슐 플로팅 버튼 (#0F172A) */
+/* 화면 하단 CTA 바로 위에 떠 있는 트렌디한 다크 캡슐 플로팅 버튼 */
 .floating-view-btn {
   position: fixed;
   left: 50%;
@@ -687,16 +800,9 @@ body {
 }
 
 .share-banner-text span {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.share-banner-text code {
-  font-weight: 800;
+  font-size: 11.5px;
+  font-weight: 700;
   color: var(--royal-blue);
-  background: #FFFFFF;
-  padding: 1px 6px;
-  border-radius: 6px;
 }
 
 .share-copy-inline {
@@ -720,11 +826,6 @@ body {
   gap: 8px;
 }
 
-.meta-divider {
-  color: #CBD5E1;
-  font-size: 12px;
-}
-
 .a2hs-trigger-link {
   border: none;
   background: transparent;
@@ -736,7 +837,7 @@ body {
   cursor: pointer;
 }
 
-/* 최하단 고정 CTA (하단 그라데이션 마스크 + 풀와이드 캡슐 버튼 height: 54px, border-radius: 16px) */
+/* 최하단 고정 CTA */
 .fixed-cta-bar {
   position: fixed;
   left: 50%;
@@ -772,7 +873,27 @@ body {
   transition: transform 0.15s ease;
 }
 
-/* ✨ Gemini 혜택 신청 & 오류 해결 가이드 3편 바텀시트 스타일 */
+.gemini-cta-btn:active {
+  transform: scale(0.985);
+}
+
+.cta-sparkle {
+  font-size: 17px;
+}
+
+.cta-main-text {
+  letter-spacing: -0.02em;
+}
+
+.cta-sub-badge {
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.22);
+  padding: 3px 9px;
+  border-radius: 9999px;
+}
+
+/* 혜택 신청 & 오류 해결 가이드 3편 바텀시트 스타일 */
 .offer-sheet {
   padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
 }
@@ -826,16 +947,6 @@ body {
   font-weight: 800;
   box-shadow: 0 6px 20px rgba(124, 58, 237, 0.32);
   margin-bottom: 14px;
-  transition: transform 0.15s ease;
-}
-
-.offer-primary-cta:active {
-  transform: scale(0.985);
-}
-
-.offer-cta-arrow {
-  font-size: 15px;
-  font-weight: 800;
 }
 
 .troubleshooting-box {
@@ -881,12 +992,6 @@ body {
   text-decoration: none;
   color: inherit;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
-  transition: border-color 0.15s ease, transform 0.15s ease;
-}
-
-.ts-guide-item:active {
-  transform: scale(0.99);
-  border-color: #CBD5E1;
 }
 
 .ts-step-badge {
@@ -940,31 +1045,6 @@ body {
   word-break: keep-all;
 }
 
-.ts-sheerid-notice strong {
-  color: var(--text-secondary);
-  font-weight: 700;
-}
-
-.gemini-cta-btn:active {
-  transform: scale(0.985);
-}
-
-.cta-sparkle {
-  font-size: 17px;
-}
-
-.cta-main-text {
-  letter-spacing: -0.02em;
-}
-
-.cta-sub-badge {
-  font-size: 11px;
-  font-weight: 800;
-  background: rgba(255, 255, 255, 0.22);
-  padding: 3px 9px;
-  border-radius: 9999px;
-}
-
 /* 토스트 알림 */
 .toast-message {
   position: fixed;
@@ -990,7 +1070,7 @@ body {
   transform: translateX(-50%) translateY(0);
 }
 
-/* PART 2-1. 홈 화면에 추가(A2HS) 바텀시트 팝업 */
+/* A2HS 바텀시트 팝업 */
 .a2hs-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1127,10 +1207,6 @@ body {
   display: grid;
   grid-template-columns: 1.35fr 1fr;
   gap: 8px;
-}
-
-.a2hs-actions.single-col {
-  grid-template-columns: 1fr;
 }
 
 .a2hs-copy-btn {
