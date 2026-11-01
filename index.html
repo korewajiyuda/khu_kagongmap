@@ -2,223 +2,483 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>☕ 경희대 카공맵 - 내 주변 500m 카공 성지 찾기</title>
-  <meta name="description" content="내 위치·정문·회기역·영통역 반경 500m 카공하기 좋은 카페를 ✨Gemini 한줄 요약과 콘센트 필터로 한눈에 찾아보세요!" />
-  <meta name="theme-color" content="#F8FAFC" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#FAFAF7" />
+  <title>경희대 카공맵 — 지금 열려 있는 카공 카페를 상황별로 찾기</title>
+  <meta name="description" content="경희대 서울캠·국제캠 주변 카페의 실시간 영업 여부, 마감 시간, 콘센트·좌석 환경을 상황별로 한눈에 확인하세요." />
 
-  <!-- 카카오톡·인스타 DM 공유용 Open Graph(OG) 메타 태그 (정규 도메인 적용) -->
-  <meta property="og:title" content="☕ 경희대 카공맵 (서울캠·국제캠)" />
-  <meta property="og:description" content="내 위치·정문·회기역·영통역 반경 500m 카공하기 좋은 카페를 ✨Gemini 한줄 요약과 콘센트 필터로 한눈에 찾아보세요!" />
+  <!-- Open Graph / Twitter Card (1200x630 fairy-trio 공유 이미지) -->
   <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="경희대 카공맵" />
+  <meta property="og:title" content="경희대 카공맵 (서울캠·국제캠)" />
+  <meta property="og:description" content="지금 열려 있는 카공 카페와 마감 시간, 콘센트·1인석 환경을 상황별로 한눈에 찾아보세요." />
   <meta property="og:url" content="https://korewajiyuda.github.io/khu_kagongmap/" />
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="☕ 경희대 카공맵 (서울캠·국제캠)" />
-  <meta name="twitter:description" content="내 위치·정문·회기역·영통역 반경 500m 카공하기 좋은 카페를 ✨Gemini 한줄 요약과 콘센트 필터로 한눈에 찾아보세요!" />
+  <meta property="og:image" content="https://korewajiyuda.github.io/khu_kagongmap/assets/fairy/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:locale" content="ko_KR" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="경희대 카공맵 (서울캠·국제캠)" />
+  <meta name="twitter:description" content="지금 열려 있는 카공 카페와 마감 시간, 콘센트·1인석 환경을 상황별로 한눈에 찾아보세요." />
+  <meta name="twitter:image" content="https://korewajiyuda.github.io/khu_kagongmap/assets/fairy/og-image.png" />
 
-  <!-- 커피 이모지(☕) SVG 파비콘 -->
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>☕</text></svg>" />
+  <!-- 파비콘 (요정 얼굴 아이콘) -->
+  <link rel="icon" type="image/webp" href="./assets/fairy/fairy-head-pin.webp" />
 
-  <!-- Pretendard 웹폰트 -->
+  <!-- Pretendard Dynamic Subset Webfont -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
 
-  <!-- Leaflet.js CDN -->
+  <!-- Leaflet 1.9.4 CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
-  <!-- GA4 (gtag.js) 기본 세팅 -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
-  <script>
-    window.GA_MEASUREMENT_ID = 'G-XXXXXXXXXX';
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', window.GA_MEASUREMENT_ID, { send_page_view: false });
-  </script>
-
-  <link rel="stylesheet" href="style.css" />
+  <!-- App Stylesheet -->
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <div class="app-shell">
-    <!-- 상단 헤더 & 컨트롤 바 (sticky + 반투명 블러) -->
-    <header class="app-header">
-      <div class="header-top">
-        <h1 class="brand-title" id="headerTitle">☕ 경희대 카공맵</h1>
-
-        <div class="header-actions">
-          <div class="segmented-campus" role="tablist" aria-label="캠퍼스 선택">
-            <button type="button" class="campus-btn active" data-campus="seoul" id="btnCampusSeoul">서울캠</button>
-            <button type="button" class="campus-btn" data-campus="global" id="btnCampusGlobal">국제캠</button>
-          </div>
-          <button type="button" class="share-icon-btn" id="btnShare" aria-label="친구에게 카공맵 공유하기" title="현재 캠퍼스 카공맵 링크 복사">
-            🔗
-          </button>
-        </div>
+  <div class="app-shell" id="appShell">
+    <!-- 5-1. 상단 헤더 1줄 (왼쪽: 작은 요정 + 경희대 카공맵 / 오른쪽: 캠퍼스 세그먼트 + 메뉴 버튼) -->
+    <header class="top-header" role="banner">
+      <div class="brand-group">
+        <img
+          src="./assets/fairy/fairy-wave.webp"
+          alt="경희대 카공맵 요정 마스코트"
+          class="brand-fairy-icon fairy-float"
+          width="24"
+          height="24"
+        />
+        <h1 class="brand-title">경희대 카공맵</h1>
       </div>
 
-      <!-- 기준점 알약(Pill) + 다중 선택(Multi-select AND) 카공 필터 칩 -->
-      <div class="header-controls">
-        <div class="pill-scroll-row" id="anchorButtonGroup" aria-label="기준 거점 선택"></div>
-        <div class="pill-scroll-row filter-row" id="filterChipContainer" aria-label="카공 해시태그 다중 필터"></div>
+      <div class="header-actions">
+        <div class="campus-segment" role="tablist" aria-label="캠퍼스 선택">
+          <button
+            type="button"
+            class="campus-btn active"
+            id="btnCampusSeoul"
+            data-campus="seoul"
+            role="tab"
+            aria-selected="true"
+            aria-label="서울캠퍼스 선택"
+          >
+            서울캠
+          </button>
+          <button
+            type="button"
+            class="campus-btn"
+            id="btnCampusGlobal"
+            data-campus="global"
+            role="tab"
+            aria-selected="false"
+            aria-label="국제캠퍼스 선택"
+          >
+            국제캠
+          </button>
+        </div>
+
+        <div class="header-menu-wrap">
+          <button
+            type="button"
+            class="icon-btn"
+            id="btnHeaderMenu"
+            aria-label="메뉴 열기"
+            aria-expanded="false"
+            aria-haspopup="true"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="4" y1="7" x2="20" y2="7"></line>
+              <line x1="4" y1="12" x2="20" y2="12"></line>
+              <line x1="4" y1="17" x2="20" y2="17"></line>
+            </svg>
+          </button>
+
+          <!-- 헤더 메뉴 드롭다운 (공유, 홈 화면 추가, Google AI Pro 학생 혜택) -->
+          <div class="header-menu-dropdown hidden" id="headerMenuDropdown" role="menu" aria-label="서비스 메뉴">
+            <button type="button" class="menu-item-btn" id="btnMenuShare" role="menuitem" aria-label="카공맵 링크 공유하기">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+              </svg>
+              <span>카공맵 링크 복사</span>
+            </button>
+            <button type="button" class="menu-item-btn" id="btnMenuA2HS" role="menuitem" aria-label="홈 화면에 추가 안내 보기">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                <line x1="12" y1="18" x2="12.01" y2="18"></line>
+              </svg>
+              <span>홈 화면에 추가</span>
+            </button>
+            <button type="button" class="menu-item-btn" id="btnMenuOffer" role="menuitem" aria-label="Google AI Pro 학생 혜택 안내 보기">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"></path>
+              </svg>
+              <span>Google AI Pro 학생 혜택</span>
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 
-    <!-- 상단 상태 바 & [지도 뷰 ↔ 목록 뷰] 빠른 전환 탭 -->
-    <div class="toolbar-row">
-      <div class="result-count">
-        <span class="gemini-live-dot"></span>
-        <span id="currentAnchorLabel">서울캠 · <strong>정문</strong></span>
-        <span class="count-divider">·</span>
-        <span>카페 <strong id="placeCount">0</strong>곳</span>
-        <span class="radius-pill" id="radiusBadge">500m 내</span>
+    <!-- 5-2. 전체화면 지도 영역 -->
+    <main class="map-stage" id="mapStage" aria-label="카공 카페 지도">
+      <div id="leafletMap" class="leaflet-canvas"></div>
+
+      <!-- 로딩 오버레이 (fairy-fly.webp + "자리 알아보는 중…") -->
+      <div class="map-loading-pill hidden" id="loadingIndicator" role="status" aria-live="polite">
+        <img src="./assets/fairy/fairy-fly.webp" alt="" class="loading-fairy fairy-float" width="28" height="28" />
+        <span id="loadingText">자리 알아보는 중…</span>
       </div>
-      <div class="toolbar-right-actions">
-        <button type="button" class="radius-toggle-btn" id="btnToggleRadius">
-          전체 거리순
+
+      <!-- 오른쪽 아래 커스텀 지도 컨트롤 (내 위치 + 확대/축소) -->
+      <div class="map-custom-controls" aria-label="지도 제어 버튼">
+        <button type="button" class="map-ctrl-btn" id="btnMapMyLocation" aria-label="내 위치로 기준점 변경">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 2v3"></path>
+            <path d="M12 19v3"></path>
+            <path d="M2 12h3"></path>
+            <path d="M19 12h3"></path>
+            <circle cx="12" cy="12" r="7"></circle>
+          </svg>
         </button>
-        <div class="view-mode-group" role="tablist" aria-label="화면 보기 모드">
-          <!-- 요구사항 1: 초기 진입 시 지도 뷰 우선 활성화 -->
-          <button type="button" class="view-toggle-btn active" id="btnViewMap" data-view="map">지도</button>
-          <button type="button" class="view-toggle-btn" id="btnViewList" data-view="list">목록</button>
+        <div class="map-zoom-group">
+          <button type="button" class="map-ctrl-btn zoom-in" id="btnMapZoomIn" aria-label="지도 확대">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+          <button type="button" class="map-ctrl-btn zoom-out" id="btnMapZoomOut" aria-label="지도 축소">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
         </div>
       </div>
-    </div>
-
-    <!-- 메인 컨텐츠 영역: 1) 지도 뷰 (기본 노출) & 2) 목록 뷰 -->
-    <main class="main-content">
-      <!-- 요구사항 1: 초기 진입 시 지도 뷰 우선 노출 (hidden 제거) -->
-      <div class="map-view-wrap" id="mapViewContainer">
-        <div class="map-floating-badge" id="mapStatusBadge">
-          <span class="legend-dot anchor"></span>기준점
-          <span class="legend-dot place"></span>카페 마커 터치
-        </div>
-        <div id="leafletMap" class="leaflet-map-box"></div>
-        <!-- 마커 클릭 시 올라오는 바텀시트 요약 카드 (메타데이터 + 사진/후기 외부 링크 + 목록 보기 전환 포함) -->
-        <div id="mapSelectedCard" class="map-bottom-sheet-card hidden" role="region" aria-label="선택된 카페 상세 정보"></div>
-      </div>
-
-      <!-- 목록 뷰 (초기 진입 시 숨김, 플로팅 버튼/바텀시트/상단 탭 조작 시 노출) -->
-      <div class="place-list hidden" id="placeListContainer"></div>
     </main>
 
-    <!-- 하단 공유 배너 (정규 도메인 안내) -->
-    <footer class="app-footer">
-      <div class="share-banner">
-        <div class="share-banner-text">
-          <strong>동기들에게도 경희대 카공맵 공유하기 ✨</strong>
-          <span id="shareUrlPreview">korewajiyuda.github.io/khu_kagongmap</span>
+    <!-- 5-1 & 5-4. 화면의 유일한 하단 고정 요소: 3단계 드래그 바텀시트 (peek / half / full) -->
+    <section
+      class="bottom-sheet sheet-half"
+      id="mainBottomSheet"
+      aria-label="카공 카페 탐색 시트"
+      data-sheet-state="half"
+    >
+      <!-- 드래그 핸들 영역 (클릭 시 단계 순환, 터치/마우스 드래그 지원) -->
+      <div class="sheet-drag-zone" id="sheetDragZone" role="button" tabindex="0" aria-label="시트 크기 조절 핸들">
+        <div class="sheet-handle-bar"></div>
+      </div>
+
+      <!-- 시트 내부 뷰 1: 목록 및 상황 탐색 뷰 -->
+      <div class="sheet-list-view" id="sheetListView">
+        <!-- 첫 진입 요정 인사 한 줄 (닫기 가능, 기능 가리지 않게 컴팩트 배치) -->
+        <div class="fairy-greeting-bar" id="fairyGreetingBar">
+          <img
+            src="./assets/fairy/fairy-trio.webp"
+            alt="요정 삼총사"
+            class="greeting-fairy-img fairy-float"
+            id="greetingFairyImg"
+            width="36"
+            height="36"
+          />
+          <p class="greeting-text" id="greetingText">오늘은 어디서 공부할까요?</p>
+          <button type="button" class="greeting-dismiss-btn" id="btnDismissGreeting" aria-label="인사말 닫기">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
-        <button type="button" class="share-copy-inline" id="btnFooterShare">링크 복사</button>
-      </div>
-      <div class="footer-meta">
-        <button type="button" class="a2hs-trigger-link" id="btnOpenA2HS">📲 홈 화면에 바로가기 추가하기</button>
-      </div>
-    </footer>
 
-    <!-- 하단 CTA 바로 위에 떠 있는 다크 캡슐 플로팅 버튼 (초기값: 📋 카페 목록 보기) -->
-    <button type="button" class="floating-view-btn" id="btnFloatingViewToggle" aria-label="목록 보기 전환">
-      📋 카페 목록 보기
-    </button>
+        <!-- 4-1 & 4-2. 상황 카드 가로 스크롤 줄 + 세부 조건 버튼 (우측 페이드 그라데이션 적용) -->
+        <div class="mood-scroll-wrapper">
+          <div class="mood-rail" id="moodRail" role="region" aria-label="상황별 카페 찾기">
+            <button
+              type="button"
+              class="detail-filter-trigger"
+              id="btnOpenDetailFilter"
+              aria-label="세부 조건 선택 열기"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="4" y1="21" x2="4" y2="14"></line>
+                <line x1="4" y1="10" x2="4" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12" y2="3"></line>
+                <line x1="20" y1="21" x2="20" y2="16"></line>
+                <line x1="20" y1="12" x2="20" y2="3"></line>
+                <line x1="1" y1="14" x2="7" y2="14"></line>
+                <line x1="9" y1="8" x2="15" y2="8"></line>
+                <line x1="17" y1="16" x2="23" y2="16"></line>
+              </svg>
+              <span class="detail-btn-label" id="detailFilterBtnLabel">세부 조건</span>
+            </button>
 
-    <!-- 최하단 고정 CTA (클릭 시 신청 바로가기 + 오류 해결 가이드 3편 바텀시트 오픈) -->
-    <div class="fixed-cta-bar">
-      <button type="button" class="gemini-cta-btn" id="btnOpenGeminiOfferSheet">
-        <span class="cta-sparkle">✨</span>
-        <span class="cta-main-text">Gemini 1년 무료 혜택 받기</span>
-        <span class="cta-sub-badge" id="ctaUtmBadge">서울캠 전용</span>
-      </button>
+            <!-- 8개 상황 카드 (고정 폭, 클릭 시 레이아웃 이동 0px) -->
+            <div class="mood-cards-track" id="moodCardsTrack" role="radiogroup" aria-label="상황 카드 목록"></div>
+          </div>
+          <div class="scroll-fade-right" aria-hidden="true"></div>
+        </div>
+
+        <!-- 5-1 & 3-2. 결과 요약 + 기준점 드롭다운 + 반경 드롭다운 + 방문 시각 + 영업 중만 토글 -->
+        <div class="sheet-control-row">
+          <div class="summary-dropdown-group">
+            <span class="result-count-text" id="resultCountSummary">영업 중 0곳</span>
+            <span class="dot-sep" aria-hidden="true">·</span>
+
+            <!-- 기준점 드롭다운 (기준: 정문 ▾) -->
+            <label class="inline-select-wrap" for="selectAnchor">
+              <select id="selectAnchor" class="clean-select" aria-label="기준점 선택"></select>
+              <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </label>
+
+            <!-- 반경 드롭다운 (500m ▾ : 300m / 500m / 1km / 전체) -->
+            <label class="inline-select-wrap" for="selectRadius">
+              <select id="selectRadius" class="clean-select" aria-label="탐색 반경 선택">
+                <option value="300">300m</option>
+                <option value="500" selected>500m</option>
+                <option value="1000">1km</option>
+                <option value="0">전체</option>
+              </select>
+              <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </label>
+          </div>
+
+          <div class="time-open-controls">
+            <!-- 언제 갈 거예요? 시간 선택 -->
+            <label class="inline-select-wrap time-select-wrap" for="selectVisitTime">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <select id="selectVisitTime" class="clean-select" aria-label="방문 예정 시각 선택">
+                <option value="now" selected>지금</option>
+                <option value="tonight22">오늘 밤 10시</option>
+                <option value="custom">직접 선택</option>
+              </select>
+              <svg class="select-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </label>
+
+            <!-- 직접 선택 시 노출되는 시간 입력 -->
+            <input
+              type="time"
+              id="customTimeInput"
+              class="custom-time-input hidden"
+              value="23:00"
+              aria-label="직접 방문 시각 입력"
+            />
+
+            <!-- 지금 영업 중만 토글 (기본 ON) -->
+            <button
+              type="button"
+              class="open-now-toggle active"
+              id="btnToggleOpenNow"
+              role="switch"
+              aria-checked="true"
+              aria-label="영업 중인 카페만 보기"
+            >
+              <span>영업 중만</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 5-3. 카페 목록 스크롤 컨테이너 (카드 높이 96~110px) -->
+        <div class="sheet-scroll-body" id="sheetScrollBody">
+          <div class="place-card-list" id="placeListContainer" role="list"></div>
+
+          <!-- 5-4. 목록 맨 아래의 얇은 Google AI Pro 학생 혜택 배너 1개 -->
+          <div class="subtle-offer-banner" id="subtleOfferBanner">
+            <div class="subtle-offer-info">
+              <span class="subtle-offer-title">경희대생 Google AI Pro 1년 무료 혜택</span>
+              <span class="subtle-offer-desc">학교 이메일 인증 방법 및 오류 해결 가이드</span>
+            </div>
+            <button type="button" class="subtle-offer-btn" id="btnOpenOfferFromList" aria-label="Google AI Pro 학생 혜택 안내 열기">
+              <span>자세히</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 시트 내부 뷰 2: 카페 상세 뷰 (카드나 마커 클릭 시 전환) -->
+      <div class="sheet-detail-view hidden" id="sheetDetailView" aria-live="polite"></div>
+    </section>
+
+    <!-- 4-2. 세부 조건 선택 모달 시트 (AND 다중 선택 + 각 조건 옆에 남는 개수 미리보기) -->
+    <div class="modal-backdrop hidden" id="detailFilterModal" role="dialog" aria-modal="true" aria-labelledby="detailFilterTitle">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h2 class="modal-title" id="detailFilterTitle">세부 조건 선택</h2>
+          <div class="modal-header-actions">
+            <button type="button" class="text-reset-btn" id="btnResetDetailFilters" aria-label="세부 조건 초기화">초기화</button>
+            <button type="button" class="icon-btn" id="btnCloseDetailFilter" aria-label="세부 조건 닫기">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <p class="modal-subtitle">여러 개를 함께 고르면 모든 조건을 만족하는 곳만 보여드려요.</p>
+        <div class="detail-chip-grid" id="detailChipGrid"></div>
+        <button type="button" class="modal-primary-btn" id="btnApplyDetailFilter" aria-label="선택한 세부 조건 결과 보기">
+          결과 보기
+        </button>
+      </div>
     </div>
 
-    <!-- 토스트 알림 -->
-    <div class="toast-message" id="toastPopup" role="status" aria-live="polite"></div>
-
-    <!-- ✨ Gemini 1년 무료 혜택 신청 & 오류 해결 가이드 3편 바텀시트 -->
-    <div class="a2hs-modal-backdrop hidden" id="geminiOfferModal">
-      <div class="a2hs-modal-sheet offer-sheet" role="dialog" aria-modal="true" aria-labelledby="offerSheetTitle">
-        <div class="a2hs-sheet-handle"></div>
-        <div class="offer-sheet-header">
-          <div class="offer-header-top">
-            <span class="offer-kicker">Google AI Plan For Student Offer</span>
-            <button type="button" class="overlay-close-btn" id="btnCloseOfferSheet" aria-label="닫기">✕</button>
-          </div>
-          <h2 id="offerSheetTitle">경희대생 Gemini Advanced 1년 무료 🎓</h2>
-          <p>학교 이메일 인증으로 월 $19.99 상당의 Google AI Pro 혜택을 1년간 무료로 이용하세요!</p>
+    <!-- Google AI Pro 학생 혜택 및 오류 해결 가이드 시트 (제품명 Google AI Pro로 통일) -->
+    <div class="modal-backdrop hidden" id="geminiOfferModal" role="dialog" aria-modal="true" aria-labelledby="offerSheetTitle">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h2 class="modal-title" id="offerSheetTitle">경희대생 Google AI Pro 1년 무료 혜택</h2>
+          <button type="button" class="icon-btn" id="btnCloseOfferSheet" aria-label="혜택 안내 닫기">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
+        <p class="modal-subtitle">학교 이메일(@khu.ac.kr) 학생 인증으로 Google AI Pro 요금제를 1년간 무료로 이용할 수 있어요.</p>
 
         <a
           href="https://gemini.google/students/?utm_source=student&utm_medium=social&utm_campaign=microsite_campus_kyunghee-ambassador&utm_content=seoul_kagong"
           target="_blank"
           rel="noopener noreferrer"
-          class="offer-primary-cta"
+          class="modal-primary-btn offer-link-btn"
           id="geminiCtaLink"
+          aria-label="Google AI Pro 학생 혜택 신청 페이지 새 창 열기"
         >
-          <span>🚀 지금 바로 1년 무료 신청하기</span>
-          <span class="offer-cta-arrow">↗</span>
+          <span>Google AI Pro 1년 무료 신청하기</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="7" y1="17" x2="17" y2="7"></line>
+            <polyline points="7 7 17 7 17 17"></polyline>
+          </svg>
         </a>
 
-        <div class="troubleshooting-box">
-          <div class="ts-title-row">
-            <strong>💡 신청 중 오류가 발생하셨나요? (해결 가이드 3편)</strong>
-            <span>케이스별 카드뉴스를 누르면 인스타그램 가이드로 이동해요</span>
+        <div class="guide-section">
+          <h3 class="guide-heading">신청 중 오류가 발생했나요? (해결 가이드 3편)</h3>
+          <div class="guide-list">
+            <a href="https://www.instagram.com/p/De1N9ysDAXr/" target="_blank" rel="noopener noreferrer" class="guide-item ts-guide-item" data-guide="step1_account_login">
+              <span class="guide-step">1편</span>
+              <div class="guide-text">
+                <strong>계정 및 로그인 오류 해결</strong>
+                <span>개인 Gmail과 학교 계정 충돌·로그인 불가 대처법</span>
+              </div>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="7" y1="17" x2="17" y2="7"></line>
+                <polyline points="7 7 17 7 17 17"></polyline>
+              </svg>
+            </a>
+            <a href="https://www.instagram.com/p/De1OMcRFw9g/" target="_blank" rel="noopener noreferrer" class="guide-item ts-guide-item" data-guide="step2_sheerid_verify">
+              <span class="guide-step">2편</span>
+              <div class="guide-text">
+                <strong>SheerID 학생 인증 오류 해결</strong>
+                <span>재학 증명 서류 업로드 및 인증 한도 초과 해결</span>
+              </div>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="7" y1="17" x2="17" y2="7"></line>
+                <polyline points="7 7 17 7 17 17"></polyline>
+              </svg>
+            </a>
+            <a href="https://www.instagram.com/p/De1OpwKDEq6/" target="_blank" rel="noopener noreferrer" class="guide-item ts-guide-item" data-guide="step3_payment_apply">
+              <span class="guide-step">3편</span>
+              <div class="guide-text">
+                <strong>혜택 적용 및 결제 오류 해결</strong>
+                <span>0원 결제 수단 등록 및 혜택 미적용 문제 해결</span>
+              </div>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="7" y1="17" x2="17" y2="7"></line>
+                <polyline points="7 7 17 7 17 17"></polyline>
+              </svg>
+            </a>
           </div>
-
-          <div class="ts-link-list">
-            <a href="https://www.instagram.com/p/De1N9ysDAXr/" target="_blank" rel="noopener noreferrer" class="ts-guide-item" data-guide="step1_account_login">
-              <span class="ts-step-badge">1편</span>
-              <div class="ts-item-text">
-                <strong>계정 및 로그인 오류 편</strong>
-                <small>개인 Gmail vs 학교 계정 충돌·로그인 불가 해결</small>
-              </div>
-              <span class="ts-ext-arrow">인스타 보기 ↗</span>
-            </a>
-
-            <a href="https://www.instagram.com/p/De1OMcRFw9g/" target="_blank" rel="noopener noreferrer" class="ts-guide-item" data-guide="step2_sheerid_verify">
-              <span class="ts-step-badge">2편</span>
-              <div class="ts-item-text">
-                <strong>SheerID 학생 인증 오류 편</strong>
-                <small>재학 증명 서류 업로드·인증 한도 초과 해결</small>
-              </div>
-              <span class="ts-ext-arrow">인스타 보기 ↗</span>
-            </a>
-
-            <a href="https://www.instagram.com/p/De1OpwKDEq6/" target="_blank" rel="noopener noreferrer" class="ts-guide-item" data-guide="step3_payment_apply">
-              <span class="ts-step-badge">3편</span>
-              <div class="ts-item-text">
-                <strong>혜택 적용 및 결제 오류 편</strong>
-                <small>0원 결제 수단 등록·혜택 미적용 문제 해결</small>
-              </div>
-              <span class="ts-ext-arrow">인스타 보기 ↗</span>
-            </a>
-          </div>
-
-          <p class="ts-sheerid-notice">
-            ※ 위 3편의 모든 케이스에 해당하지 않을 경우, <strong>공식 SheerID 고객센터 문의처</strong>를 통해 가장 빠르게 해결받으실 수 있습니다.
-          </p>
+          <p class="guide-footnote">위 3편에 해당하지 않는 경우 공식 SheerID 고객센터 문의처를 통해 해결하실 수 있습니다.</p>
         </div>
       </div>
     </div>
 
-    <!-- 인앱 브라우저 대응 홈 화면 추가(A2HS) 바텀시트 팝업 -->
-    <div class="a2hs-modal-backdrop hidden" id="a2hsModal">
-      <div class="a2hs-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="a2hsTitle">
-        <div class="a2hs-sheet-handle"></div>
-        <div class="a2hs-header">
-          <div class="a2hs-badge-icon" id="a2hsIconBox">✨</div>
-          <div class="a2hs-title-group">
-            <span class="a2hs-kicker" id="a2hsKicker">KHU Campus Tip</span>
-            <h2 id="a2hsTitle">인스타·카톡에서는 위치 권한과 홈 화면 추가가 제한돼요!</h2>
-            <p id="a2hsSubtitle">외부 브라우저로 열면 내 위치 500m 탐색과 홈 화면 추가가 바로 가능해요.</p>
+    <!-- 인앱 브라우저 및 홈 화면 추가(A2HS) 안내 시트 (새 비주얼 시스템 적용) -->
+    <div class="modal-backdrop hidden" id="a2hsModal" role="dialog" aria-modal="true" aria-labelledby="a2hsTitle">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <div class="a2hs-brand-row">
+            <img src="./assets/fairy/fairy-wave.webp" alt="" width="28" height="28" loading="lazy" />
+            <h2 class="modal-title" id="a2hsTitle">홈 화면에 카공맵 추가하기</h2>
           </div>
+          <button type="button" class="icon-btn" id="btnCloseA2HS" aria-label="안내 시트 닫기">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
+        <p class="modal-subtitle" id="a2hsSubtitle">시험기간·공강 때마다 앱처럼 바로 열어 내 주변 카공 카페를 확인할 수 있어요.</p>
         <div class="a2hs-body" id="a2hsInstructionBody"></div>
-        <div class="a2hs-actions" id="a2hsActionGroup">
-          <button type="button" class="a2hs-copy-btn" id="btnA2HSCopyLink">🔗 카공맵 링크 복사하기</button>
-          <button type="button" class="a2hs-close-btn" id="btnCloseA2HS">닫기</button>
+        <div class="a2hs-actions">
+          <button type="button" class="modal-primary-btn" id="btnA2HSCopyLink" aria-label="카공맵 주소 복사하기">카공맵 링크 복사하기</button>
         </div>
       </div>
     </div>
+
+    <!-- 3-3. 정보가 달라요 (정보 수정 제보 시트) -->
+    <div class="modal-backdrop hidden" id="reportModal" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <div class="a2hs-brand-row">
+            <img src="./assets/fairy/fairy-wave.webp" alt="" width="26" height="26" loading="lazy" />
+            <h2 class="modal-title" id="reportModalTitle">정보가 달라요</h2>
+          </div>
+          <button type="button" class="icon-btn" id="btnCloseReportModal" aria-label="제보 시트 닫기">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <p class="modal-subtitle" id="reportModalSubtitle">실제 방문했을 때 달랐던 내용을 알려주시면 시트에 빠르게 반영할게요.</p>
+        <div class="report-type-grid" id="reportTypeGrid">
+          <button type="button" class="detail-cond-chip is-selected" data-report-type="영업시간·휴무일이 달라요">영업시간·휴무일 변경</button>
+          <button type="button" class="detail-cond-chip" data-report-type="콘센트·좌석 정보가 달라요">콘센트·좌석 정보 변경</button>
+          <button type="button" class="detail-cond-chip" data-report-type="임시휴업 또는 폐업했어요">임시휴업·폐업 제보</button>
+          <button type="button" class="detail-cond-chip" data-report-type="기타 정보 수정 제보">기타 정보 수정</button>
+        </div>
+        <textarea
+          id="reportNoteInput"
+          class="report-textarea"
+          rows="3"
+          placeholder="예: 주말에는 밤 10시에 마감해요 / 2층 창가 콘센트가 생겼어요"
+          aria-label="상세 제보 내용 입력"
+        ></textarea>
+        <div class="report-actions-stack">
+          <button type="button" class="modal-primary-btn" id="btnSubmitReportSheet" aria-label="제보 내용 복사 후 시트 열기">
+            <span>제보 내용 복사하고 데이터 시트 열기</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="7" y1="17" x2="17" y2="7"></line>
+              <polyline points="7 7 17 7 17 17"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 토스트 알림 -->
+    <div class="toast-message" id="toastPopup" role="status" aria-live="polite"></div>
   </div>
 
+  <!-- Leaflet 1.9.4 & Hours Engine & App Logic -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="app.js"></script>
+  <script src="./hours.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>

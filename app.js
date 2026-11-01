@@ -1,85 +1,190 @@
 /**
- * ☕ 경희대 카공맵 (단독 웹앱) - app.js
- * [5대 요구사항 완벽 반영 버전]
- * 1) 초기 진입 화면: 지도 뷰 우선 노출 (viewMode: 'map' 기본값 + 바텀시트/플로팅/탭에서 목록 뷰 전환)
- * 2) 사진 및 후기 영역 외부 링크 연동 (네이버 지도 사진/방문자 리뷰 & 카카오맵 후기 새 창 이동)
- * 3) 공유 숏링크 정규화 (제미나이 링크 제거 -> https://korewajiyuda.github.io/khu_kagongmap/?campus=...)
- * 4) 태그 다중 선택(Multi-select) AND 교집합 필터링 고도화 (이벤트 위임 및 정규화 비교)
- * 5) 장소 상세 메타데이터 추가 반영 (운영 날짜 days, 운영 시간 hours, 콘센트 유무/개수 outlets)
+ * app.js — 경희대 카공맵 리디자인 메인 애플리케이션
+ *
+ * 핵심 아키텍처:
+ * 1. 바닐라 JS + Leaflet 1.9.4 + hours.js (빌드 도구 없음)
+ * 2. 구글 시트 CSV 우선 로드 + 로컬 data.csv 자동 보완/대체 (시트만 수정해도 즉시 반영)
+ * 3. 상황 카드 8종(단일 선택, URL ?campus=...&mood=... 공유) + 세부 조건 5종(다중 AND + 남는 개수 미리보기)
+ * 4. DOM 제자리 업데이트(class/aria/count 텍스트만 변경)로 클릭 시 레이아웃 이동 0px 보장
+ * 5. CARTO Positron 밝은 지도 + 선택 마커만 라벨 표시 + 3단계 바텀시트(peek / half / full)
  */
 
-// 1. 구글 시트 CSV 연동 상수 (실패 또는 추가 컬럼 누락 시 로컬 data.csv 메타데이터와 자동 병합/Fallback)
+// 1. 핵심 설정 상수
 const GOOGLE_SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/1td87-lDak8Cj8abo_qKMiARD8rXJ14Mwr4g3rknZJLU/export?format=csv";
 const LOCAL_CSV_URL = "./data.csv";
-
-// 요구사항 3: 정규 공유 도메인 상수 (제미나이 링크 완전 제거)
 const CANONICAL_SERVICE_URL = "https://korewajiyuda.github.io/khu_kagongmap/";
-
-// 하단 고정 CTA용 공식 학생 혜택 URL
 const GEMINI_BASE_URL =
   "https://gemini.google/students/?utm_source=student&utm_medium=social&utm_campaign=microsite_campus_kyunghee-ambassador";
-const DEFAULT_RADIUS_METERS = 500;
 
-// 2. 캠퍼스별 기준점 6곳 위·경도 좌표
+// 8절: GA4 측정 ID 상수화 (비어 있으면 gtag 외부 스크립트를 로드하지 않되, dataLayer에는 이벤트를 적재)
+const GA_MEASUREMENT_ID = "";
+
+// 3-3절: 정보 수정 제보 링크 상수화 (기본값으로 데이터 시트/제보 링크 활성화, 비어 있으면 제보 버튼 숨김)
+const REPORT_FORM_URL =
+  "https://docs.google.com/spreadsheets/d/1td87-lDak8Cj8abo_qKMiARD8rXJ14Mwr4g3rknZJLU/edit?usp=sharing";
+
+// 2. 캠퍼스별 기준점 좌표
 const CAMPUS_ANCHORS = {
   seoul: [
-    { key: "main_gate", label: "정문", lat: 37.5939, lng: 127.0530 },
+    { key: "main_gate", label: "정문", lat: 37.5939, lng: 127.053 },
     { key: "back_gate", label: "후문", lat: 37.5947, lng: 127.0578 },
     { key: "hoegi_stn", label: "회기역", lat: 37.5898, lng: 127.0579 },
   ],
   global: [
-    { key: "main_gate", label: "정문", lat: 37.2460, lng: 127.0780 },
+    { key: "main_gate", label: "정문", lat: 37.246, lng: 127.078 },
     { key: "sasaek_sq", label: "사색의광장", lat: 37.2415, lng: 127.0815 },
     { key: "yeongtong_stn", label: "영통역", lat: 37.2515, lng: 127.0713 },
   ],
 };
 
-// 3. 카공맵 전용 다중 선택 필터 칩 정의
-const KAGONG_FILTER_TAGS = [
-  "콘센트많음",
-  "조용한",
-  "밤늦게까지",
-  "24시간",
-  "교내카페",
-  "1인석",
+// 3. 4-1절: 상황 카드 8종 정의 (문구 원문 유지, 밤늦게까지/24시간은 영업시간 데이터로 판정)
+const MOOD_CARDS = [
+  {
+    id: "chatty_pretty",
+    label: "적당히 떠들면서 예쁜 카페에서 공부하고 싶을 때",
+    match: (place) =>
+      place.tags.includes("대화가능") || place.tags.includes("분위기좋음"),
+  },
+  {
+    id: "late_night",
+    label: "진짜 밤늦게까지 집중해야 할 때",
+    match: (place, refDate) =>
+      window.HoursEngine.isLateNightByHours(place, refDate) &&
+      place.tags.includes("콘센트많음"),
+  },
+  {
+    id: "cram",
+    label: "내일 시험인데 아직 1장도 안 봤을 때",
+    match: (place) => window.HoursEngine.is24HoursPlace(place),
+  },
+  {
+    id: "battery",
+    label: "노트북 배터리가 간당간당할 때",
+    match: (place) => place.tags.includes("콘센트많음"),
+  },
+  {
+    id: "alone",
+    label: "아무도 신경 안 쓰고 혼자 파고들고 싶을 때",
+    match: (place) =>
+      place.tags.includes("1인석") || place.tags.includes("조용한"),
+  },
+  {
+    id: "gap_hour",
+    label: "공강 1시간, 멀리 가기 귀찮을 때",
+    match: (place) =>
+      place.tags.includes("교내카페") || place.distance <= 300,
+  },
+  {
+    id: "team",
+    label: "팀플 회의해야 할 때",
+    match: (place) => place.tags.includes("단체석"),
+  },
+  {
+    id: "budget",
+    label: "커피값도 아끼고 싶을 때",
+    match: (place) => place.tags.includes("저가"),
+  },
 ];
 
-// 4. 애플리케이션 상태 (요구사항 1: 초기 진입 시 'map' 뷰 우선 노출)
+// 4. 4-2 & 4-3절: 세부 조건 5종 및 태그 표시용 라벨 매핑 ('#' 제거, 띄어쓰기 적용)
+const DETAIL_CONDITIONS = [
+  {
+    key: "콘센트많음",
+    label: "콘센트 많음",
+    match: (place) => place.tags.includes("콘센트많음"),
+  },
+  {
+    key: "조용한",
+    label: "조용한",
+    match: (place) => place.tags.includes("조용한"),
+  },
+  {
+    key: "1인석",
+    label: "1인석",
+    match: (place) => place.tags.includes("1인석"),
+  },
+  {
+    key: "교내카페",
+    label: "교내 카페",
+    match: (place) => place.tags.includes("교내카페"),
+  },
+  {
+    key: "24시간",
+    label: "24시간",
+    match: (place) => window.HoursEngine.is24HoursPlace(place),
+  },
+];
+
+const TAG_DISPLAY_LABELS = {
+  콘센트많음: "콘센트 많음",
+  조용한: "조용한",
+  밤늦게까지: "밤늦게까지",
+  "24시간": "24시간",
+  교내카페: "교내 카페",
+  "1인석": "1인석",
+  대화가능: "대화 가능",
+  분위기좋음: "분위기 좋음",
+  단체석: "단체석",
+  저가: "저가",
+};
+
+// 5. 애플리케이션 상태
 const state = {
   places: [],
-  campus: "seoul", // 'seoul' | 'global'
-  mapType: "kagong",
+  campus: "seoul",
   anchorKey: "main_gate",
-  anchorCoord: { lat: 37.5939, lng: 127.0530, label: "정문" },
-  radiusLimitEnabled: true,
-  selectedTags: new Set(), // 다중 선택 태그 Set (AND 조건)
-  viewMode: "map", // 기본값을 'list'가 아닌 'map'으로 변경!
-  initialMarkerId: null,
+  anchorCoord: { lat: 37.5939, lng: 127.053, label: "정문" },
+  radiusMeters: 500, // 300 | 500 | 1000 | 0(전체)
+  selectedMood: null, // MOOD_CARDS id 또는 null
+  selectedDetails: new Set(), // DETAIL_CONDITIONS key Set
+  openNowOnly: true, // 기본 ON ("지금 영업 중만")
+  visitTimeMode: "now", // 'now' | 'tonight22' | 'custom'
+  customTimeValue: "23:00",
+  selectedPlaceId: null,
+  sheetState: "half", // 'peek' | 'half' | 'full'
+  greetingDismissed: false,
 };
 
 let leafletMap = null;
 let radiusCircle = null;
 let anchorMarker = null;
 let placeMarkersLayer = null;
+let markerElementsById = new Map();
+let refreshTimerId = null;
 
-// 5. GA4 이벤트 트래킹 래퍼 함수
+// 6. GA4 초기화 및 이벤트 트래킹 (기존 이벤트 이름 유지 + 신규 이벤트 5종 지원)
+function initGA4() {
+  if (!GA_MEASUREMENT_ID || !GA_MEASUREMENT_ID.trim()) return;
+  const id = GA_MEASUREMENT_ID.trim();
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function () {
+    window.dataLayer.push(arguments);
+  };
+  window.gtag("js", new Date());
+  window.gtag("config", id);
+
+  const script = document.createElement("script");
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`;
+  document.head.appendChild(script);
+}
+
 function trackEvent(eventName, params = {}) {
   const payload = {
     campus: state.campus,
     map: "kagong",
     ...params,
   };
-  console.log("[GA4]", eventName, payload);
-
-  if (typeof window.gtag === "function") {
+  window.dataLayer = window.dataLayer || [];
+  if (typeof window.gtag === "function" && GA_MEASUREMENT_ID) {
     window.gtag("event", eventName, payload);
-  } else if (Array.isArray(window.dataLayer)) {
+  } else {
     window.dataLayer.push({ event: eventName, ...payload });
   }
 }
 
-// 6. 하버사인(Haversine) 거리 계산 공식 (단위: m)
+// 7. 하버사인 거리 계산 (단위: m)
 function getDistanceMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
   const toRad = (deg) => (deg * Math.PI) / 180;
@@ -95,55 +200,31 @@ function getDistanceMeters(lat1, lng1, lat2, lng2) {
   return Math.round(R * c);
 }
 
-// 요구사항 5: 태그 기반 기본 메타데이터 추론 헬퍼 (구글 시트에 컬럼이 아직 없을 경우 자동 보완)
-function inferDefaultMetadata(tags, name) {
-  const tagSet = new Set(tags);
-  let days = "매일 (연중무휴)";
-  let hours = "09:00 ~ 22:00";
-  let outlets = "창가 및 벽면 좌석 콘센트 구비";
-
-  if (tagSet.has("교내카페")) {
-    days = "평일 운영 (주말·공휴일 휴무)";
-    hours = "08:00 ~ 19:00";
-    outlets = "창가 바테이블 및 로비 벽면 일부 구비";
-  } else if (tagSet.has("24시간")) {
-    days = "매일 (연중무휴)";
-    hours = "24시간 영업";
-    outlets = "전 좌석 또는 카공석 1인 1콘센트 완비";
-  } else if (tagSet.has("밤늦게까지")) {
-    hours = "08:30 ~ 23:30";
+function formatDistanceLabel(meters) {
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(1)}km`;
   }
-
-  if (tagSet.has("콘센트많음") && tagSet.has("1인석")) {
-    outlets = "1인 카공석 및 테이블별 개별 콘센트 다수 완비";
-  } else if (tagSet.has("콘센트많음")) {
-    outlets = "카공존 및 벽면·바테이블 좌석당 콘센트 넉넉함";
-  } else if (tagSet.has("1인석")) {
-    outlets = "1인 집중석 및 벽면 좌석 콘센트 구비";
-  }
-
-  return { days, hours, outlets };
+  return `${meters}m`;
 }
 
-// 요구사항 2: 사진 및 후기 외부 리뷰 페이지 링크 생성 헬퍼
-function buildExternalReviewLinks(place) {
-  const baseSearchQuery = encodeURIComponent(
-    `${place.campus === "seoul" ? "경희대 회기" : "경희대 국제캠 영통"} ${place.name}`
-  );
-  const naverMainUrl =
-    place.link || `https://map.naver.com/p/search/${encodeURIComponent(place.name)}`;
-  // 네이버 플레이스 사진/리뷰 검색 및 카카오맵 후기 페이지 연동
-  const photoReviewUrl = naverMainUrl;
-  const kakaoReviewUrl = `https://map.kakao.com/?q=${baseSearchQuery}`;
-
-  return {
-    naverMainUrl,
-    photoReviewUrl,
-    kakaoReviewUrl,
-  };
+// 8. 현재 선택된 방문 시각("지금" / "오늘 밤 10시" / "직접 선택")에 따른 기준 Date 반환
+function getEffectiveReferenceDate() {
+  const now = new Date();
+  if (state.visitTimeMode === "tonight22") {
+    return window.HoursEngine.createSeoulDateAtTime(22, 0, now);
+  }
+  if (state.visitTimeMode === "custom" && state.customTimeValue) {
+    const parts = state.customTimeValue.split(":");
+    const hh = parseInt(parts[0], 10);
+    const mm = parseInt(parts[1], 10);
+    if (!Number.isNaN(hh) && !Number.isNaN(mm)) {
+      return window.HoursEngine.createSeoulDateAtTime(hh, mm, now);
+    }
+  }
+  return now;
 }
 
-// 7. 안전한 CSV 파서 & 메타데이터(days, hours, outlets) 파싱
+// 9. CSV 파서 (따옴표 안의 쉼표 및 구글 시트 단일 셀 붙여넣기 행 완벽 처리)
 function parseCSVLine(line) {
   const result = [];
   let current = "";
@@ -175,6 +256,27 @@ function normalizeTag(tagStr) {
     .trim();
 }
 
+function inferDefaultMetadata(tags) {
+  const tagSet = new Set(tags);
+  let days = "매일";
+  let hours = "09:00 ~ 22:00";
+  let outlets = "창가 및 벽면 좌석 콘센트 구비";
+
+  if (tagSet.has("교내카페")) {
+    days = "평일 (주말 휴무)";
+    hours = "08:00 ~ 19:00";
+    outlets = "창가 바테이블 및 로비 벽면 일부 구비";
+  } else if (tagSet.has("24시간")) {
+    days = "매일 (연중무휴)";
+    hours = "24시간 영업";
+    outlets = "전 좌석 콘센트 완비";
+  } else if (tagSet.has("밤늦게까지")) {
+    hours = "08:30 ~ 23:00";
+  }
+
+  return { days, hours, outlets };
+}
+
 function parseCSV(csvText) {
   const lines = csvText
     .split(/\r?\n/)
@@ -182,243 +284,1205 @@ function parseCSV(csvText) {
     .filter((l) => l.length > 0);
   if (lines.length < 2) return [];
 
-  const headers = parseCSVLine(lines[0]).map((h) => h.trim());
-  return lines
-    .slice(1)
-    .map((line) => {
-      const cols = parseCSVLine(line);
-      const obj = {};
-      headers.forEach((h, idx) => {
-        obj[h] = cols[idx] ?? "";
-      });
+  const baseHeaders = parseCSVLine(lines[0]).map((h) => h.trim());
+  const extendedOrder = [
+    "id",
+    "campus",
+    "map",
+    "name",
+    "lat",
+    "lng",
+    "summary",
+    "tags",
+    "link",
+    "days",
+    "hours",
+    "outlets",
+    "status",
+    "verified_at",
+    "hours_detail",
+    "break_time",
+    "last_order",
+    "closed_days",
+    "note",
+  ];
 
-      const rawTags = obj.tags
-        ? obj.tags
-            .split(",")
-            .map((t) => normalizeTag(t))
-            .filter(Boolean)
-        : [];
+  const parsedItems = [];
 
-      const fallbackMeta = inferDefaultMetadata(rawTags, obj.name);
+  for (let idx = 1; idx < lines.length; idx++) {
+    let cols = parseCSVLine(lines[idx]);
 
-      return {
-        id: Number(obj.id),
-        campus: (obj.campus || "seoul").trim(),
-        map: (obj.map || "kagong").trim(),
-        name: (obj.name || "").trim(),
-        lat: parseFloat(obj.lat),
-        lng: parseFloat(obj.lng),
-        summary: (obj.summary || "").trim(),
-        tags: rawTags,
-        link:
-          (obj.link || "").trim() ||
-          `https://map.naver.com/p/search/${encodeURIComponent(obj.name)}`,
-        days: (obj.days || "").trim() || fallbackMeta.days,
-        hours: (obj.hours || "").trim() || fallbackMeta.hours,
-        outlets: (obj.outlets || "").trim() || fallbackMeta.outlets,
-      };
-    })
-    .filter((item) => item.map === "kagong" && !Number.isNaN(item.lat));
+    // 구글 시트 A열 한 칸에 통째로 붙여넣어진 행("31,seoul,kagong,...") 자동 복원
+    if (
+      cols.length > 1 &&
+      cols[0].includes(",") &&
+      /^\d+\s*,\s*(seoul|global)\s*,\s*kagong\s*,/.test(cols[0]) &&
+      cols.slice(1).every((c) => !c)
+    ) {
+      cols = parseCSVLine(cols[0]);
+    }
+
+    const obj = {};
+    baseHeaders.forEach((h, i) => {
+      obj[h] = cols[i] ?? "";
+    });
+    // 만약 시트 헤더보다 더 많은 컬럼이 들어온 경우 extendedOrder 순서로 매핑
+    if (cols.length > baseHeaders.length) {
+      for (let i = baseHeaders.length; i < cols.length && i < extendedOrder.length; i++) {
+        const key = extendedOrder[i];
+        if (!obj[key]) obj[key] = cols[i] ?? "";
+      }
+    }
+
+    const rawTags = obj.tags
+      ? obj.tags
+          .split(/[,·]/)
+          .map((t) => normalizeTag(t))
+          .filter(Boolean)
+      : [];
+
+    const fallbackMeta = inferDefaultMetadata(rawTags);
+    const rawDays = (obj.days || "").trim();
+    const rawHours = (obj.hours || "").trim();
+    const rawOutlets = (obj.outlets || "").trim();
+
+    const item = {
+      id: Number(obj.id),
+      campus: (obj.campus || "seoul").trim(),
+      map: (obj.map || "kagong").trim(),
+      name: (obj.name || "").trim(),
+      lat: parseFloat(obj.lat),
+      lng: parseFloat(obj.lng),
+      summary: (obj.summary || "").trim(),
+      tags: Array.from(new Set(rawTags)),
+      link:
+        (obj.link || "").trim() ||
+        `https://map.naver.com/p/search/${encodeURIComponent(obj.name || "")}`,
+      _rawDays: rawDays,
+      _rawHours: rawHours,
+      _rawOutlets: rawOutlets,
+      days: rawDays || fallbackMeta.days,
+      hours: rawHours || fallbackMeta.hours,
+      outlets: rawOutlets || fallbackMeta.outlets,
+      status: (obj.status || "운영").trim() || "운영",
+      verified_at: (obj.verified_at || "").trim(),
+      hours_detail: (obj.hours_detail || "").trim(),
+      break_time: (obj.break_time || "").trim(),
+      last_order: (obj.last_order || "").trim(),
+      closed_days: (obj.closed_days || "").trim(),
+      note: (obj.note || "").trim(),
+    };
+
+    if (item.map === "kagong" && item.name && !Number.isNaN(item.lat) && !Number.isNaN(item.lng)) {
+      parsedItems.push(item);
+    }
+  }
+
+  return parsedItems;
+}
+
+function normalizePlaceNameKey(campus, name) {
+  return `${campus}::${String(name || "")
+    .replace(/\s+/g, "")
+    .toLowerCase()}`;
 }
 
 async function loadPlacesData() {
-  // 로컬 data.csv를 먼저 읽어 상세 메타데이터(days, hours, outlets) 사전 구축
   let localPlaces = [];
   try {
     const localRes = await fetch(LOCAL_CSV_URL);
     if (localRes.ok) {
       localPlaces = parseCSV(await localRes.text());
     }
-  } catch (e) {
-    console.warn("로컬 data.csv 로드 중 경고:", e);
+  } catch (err) {
+    console.warn("로컬 data.csv 로드 실패:", err);
   }
 
-  const localMetaById = new Map(localPlaces.map((p) => [p.id, p]));
+  const localById = new Map(localPlaces.map((p) => [p.id, p]));
+  const localByName = new Map(
+    localPlaces.map((p) => [normalizePlaceNameKey(p.campus, p.name), p])
+  );
 
-  if (GOOGLE_SHEET_CSV_URL && GOOGLE_SHEET_CSV_URL.trim().length > 0) {
+  if (GOOGLE_SHEET_CSV_URL && GOOGLE_SHEET_CSV_URL.trim()) {
     try {
       const sheetRes = await fetch(GOOGLE_SHEET_CSV_URL.trim());
       if (sheetRes.ok) {
-        const sheetCsv = await sheetRes.text();
-        const parsedSheet = parseCSV(sheetCsv);
-        if (parsedSheet.length > 0) {
-          // 구글 시트에 days/hours/outlets 컬럼이 비어 있으면 로컬 상세 메타데이터로 보강
-          return parsedSheet.map((item) => {
-            const localMatch = localMetaById.get(item.id);
-            if (!localMatch) return item;
-            return {
+        const sheetPlaces = parseCSV(await sheetRes.text());
+        if (sheetPlaces.length > 0) {
+          // 시트 데이터와 로컬 확장 스키마 병합 및 이름 중복 통합
+          const mergedMap = new Map();
+
+          sheetPlaces.forEach((item) => {
+            const nameKey = normalizePlaceNameKey(item.campus, item.name);
+            const localMatch =
+              localById.get(item.id) || localByName.get(nameKey);
+
+            const mergedTags = Array.from(
+              new Set([
+                ...(localMatch ? localMatch.tags : []),
+                ...item.tags,
+              ])
+            );
+
+            const enriched = {
               ...item,
-              days: item.days || localMatch.days,
-              hours: item.hours || localMatch.hours,
-              outlets: item.outlets || localMatch.outlets,
+              tags: mergedTags,
+              days: item._rawDays || (localMatch && localMatch._rawDays) || item.days,
+              hours: item._rawHours || (localMatch && localMatch._rawHours) || item.hours,
+              outlets:
+                item._rawOutlets ||
+                (localMatch && localMatch._rawOutlets) ||
+                item.outlets,
+              status:
+                item.status !== "운영"
+                  ? item.status
+                  : (localMatch && localMatch.status) || "운영",
+              verified_at:
+                item.verified_at || (localMatch && localMatch.verified_at) || "",
+              hours_detail:
+                item.hours_detail || (localMatch && localMatch.hours_detail) || "",
+              break_time:
+                item.break_time || (localMatch && localMatch.break_time) || "",
+              last_order:
+                item.last_order || (localMatch && localMatch.last_order) || "",
+              closed_days:
+                item.closed_days || (localMatch && localMatch.closed_days) || "",
+              note: item.note || (localMatch && localMatch.note) || "",
             };
+
+            if (mergedMap.has(nameKey)) {
+              const prev = mergedMap.get(nameKey);
+              prev.tags = Array.from(new Set([...prev.tags, ...enriched.tags]));
+              if (enriched._rawDays && !prev._rawDays) prev.days = enriched.days;
+              if (enriched._rawHours && !prev._rawHours) prev.hours = enriched.hours;
+              if (enriched._rawOutlets && !prev._rawOutlets)
+                prev.outlets = enriched.outlets;
+            } else {
+              mergedMap.set(nameKey, enriched);
+            }
           });
+
+          return window.HoursEngine.filterActivePlaces(
+            Array.from(mergedMap.values())
+          );
         }
       }
     } catch (sheetErr) {
-      console.warn(
-        "구글 시트 CSV 로드 실패, 로컬 data.csv로 Fallback 합니다:",
-        sheetErr
-      );
+      console.warn("구글 시트 로드 실패, 로컬 data.csv를 사용합니다:", sheetErr);
     }
   }
 
-  return localPlaces;
+  return window.HoursEngine.filterActivePlaces(localPlaces);
 }
 
-// 8. URL 파라미터 초기화 및 동기화 (요구사항 1: 기본 뷰 모드는 항상 'map')
+// 10. URL 파라미터 동기화 (?campus=seoul|global&anchor=...&mood=...)
 function syncStateFromURL() {
   const params = new URLSearchParams(window.location.search);
   const campusParam = params.get("campus");
   const anchorParam = params.get("anchor");
-  const viewParam = params.get("view");
-  const markerParam = params.get("marker");
-
-  state.mapType = "kagong";
+  const moodParam = params.get("mood");
+  const radiusParam = params.get("radius");
 
   if (campusParam === "seoul" || campusParam === "global") {
     state.campus = campusParam;
   }
 
-  // URL에 ?view=list가 명시된 경우에만 목록 뷰, 그 외 모든 초기 진입은 'map' 우선 노출!
-  if (viewParam === "list") {
-    state.viewMode = "list";
-  } else {
-    state.viewMode = "map";
-  }
-
   const anchors = CAMPUS_ANCHORS[state.campus];
-  const matchedAnchor =
-    anchors.find((a) => a.key === anchorParam) || anchors[0];
+  const matchedAnchor = anchors.find((a) => a.key === anchorParam) || anchors[0];
   state.anchorKey = matchedAnchor.key;
   state.anchorCoord = {
     lat: matchedAnchor.lat,
     lng: matchedAnchor.lng,
     label: matchedAnchor.label,
   };
-  state.initialMarkerId = markerParam ? Number(markerParam) : null;
+
+  if (moodParam && MOOD_CARDS.some((m) => m.id === moodParam)) {
+    state.selectedMood = moodParam;
+  }
+
+  if (radiusParam !== null && ["300", "500", "1000", "0"].includes(radiusParam)) {
+    state.radiusMeters = Number(radiusParam);
+  }
 }
 
 function updateURLParams() {
   const url = new URL(window.location.href);
-  url.searchParams.delete("map");
   url.searchParams.set("campus", state.campus);
-  window.history.replaceState({}, "", url.toString());
-
-  // 푸터 공유 링크 프리뷰도 현재 캠퍼스에 맞춰 갱신
-  const previewEl = document.getElementById("shareUrlPreview");
-  if (previewEl) {
-    previewEl.textContent = `korewajiyuda.github.io/khu_kagongmap/?campus=${state.campus}`;
+  url.searchParams.set("anchor", state.anchorKey);
+  if (state.selectedMood) {
+    url.searchParams.set("mood", state.selectedMood);
+  } else {
+    url.searchParams.delete("mood");
   }
+  window.history.replaceState({}, "", url.toString());
 }
 
-// 요구사항 3: 정규 서비스 도메인 공유 링크 생성 함수 (제미나이 링크 완전 제거)
-function getCanonicalShareUrl() {
+function getCanonicalShareUrl(placeId = null) {
   const shareUrl = new URL(CANONICAL_SERVICE_URL);
   shareUrl.searchParams.set("campus", state.campus);
-  if (state.anchorKey && state.anchorKey !== "gps") {
-    shareUrl.searchParams.set("anchor", state.anchorKey);
+  shareUrl.searchParams.set("anchor", state.anchorKey);
+  if (state.selectedMood) {
+    shareUrl.searchParams.set("mood", state.selectedMood);
+  }
+  if (placeId) {
+    shareUrl.searchParams.set("place", String(placeId));
   }
   return shareUrl.toString();
 }
 
-// 9. 하단 고정 CTA 버튼 동적 UTM 업데이트
-function updateFixedCTA() {
-  const ctaEl = document.getElementById("geminiCtaLink");
-  const badgeEl = document.getElementById("ctaUtmBadge");
-  if (!ctaEl) return;
+// 11. 필터링 및 거리·영업상태 계산 파이프라인
+function getBaseFilteredPlaces(refDate) {
+  const activePlaces = window.HoursEngine.filterActivePlaces(state.places);
 
-  const utmContent = `${state.campus}_kagong`;
-  ctaEl.href = `${GEMINI_BASE_URL}&utm_content=${utmContent}`;
-
-  if (badgeEl) {
-    const campusLabel = state.campus === "seoul" ? "서울캠" : "국제캠";
-    badgeEl.textContent = `${campusLabel} 전용`;
-  }
+  return activePlaces
+    .filter((p) => p.campus === state.campus)
+    .map((p) => {
+      const distance = getDistanceMeters(
+        state.anchorCoord.lat,
+        state.anchorCoord.lng,
+        p.lat,
+        p.lng
+      );
+      const businessStatus = window.HoursEngine.getPlaceBusinessStatus(
+        p,
+        refDate
+      );
+      return {
+        ...p,
+        distance,
+        businessStatus,
+      };
+    })
+    .filter((p) => {
+      // 반경 필터
+      if (state.radiusMeters > 0 && p.distance > state.radiusMeters) {
+        return false;
+      }
+      // 영업 중만 토글
+      if (state.openNowOnly && !p.businessStatus.isOpen) {
+        return false;
+      }
+      return true;
+    });
 }
 
-// 10. 상단 헤더 렌더링
-function renderHeader() {
-  const titleEl = document.getElementById("headerTitle");
-  if (titleEl) {
-    titleEl.textContent = "☕ 경희대 카공맵";
-  }
+function applyMoodAndDetails(places, moodId, detailsSet, refDate) {
+  const moodObj = moodId ? MOOD_CARDS.find((m) => m.id === moodId) : null;
+  const activeConds = DETAIL_CONDITIONS.filter((c) => detailsSet.has(c.key));
 
-  document.querySelectorAll(".campus-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.campus === state.campus);
+  return places.filter((p) => {
+    if (moodObj && !moodObj.match(p, refDate)) {
+      return false;
+    }
+    for (let i = 0; i < activeConds.length; i++) {
+      if (!activeConds[i].match(p, refDate)) {
+        return false;
+      }
+    }
+    return true;
   });
 }
 
-// 11. 기준점 알약(Pill) 컨트롤 렌더링
-function renderAnchorControls() {
-  const container = document.getElementById("anchorButtonGroup");
-  const labelEl = document.getElementById("currentAnchorLabel");
-  const radiusBadgeEl = document.getElementById("radiusBadge");
-  const toggleBtnEl = document.getElementById("btnToggleRadius");
+function getSortedDisplayPlaces(refDate) {
+  const base = getBaseFilteredPlaces(refDate);
+  const filtered = applyMoodAndDetails(
+    base,
+    state.selectedMood,
+    state.selectedDetails,
+    refDate
+  );
 
-  const campusName = state.campus === "seoul" ? "서울캠" : "국제캠";
-  if (labelEl) {
-    labelEl.innerHTML = `${campusName} · <strong>${state.anchorCoord.label}</strong>`;
+  // 5-3절: 기본 정렬은 영업 중 우선 → 거리순
+  return filtered.sort((a, b) => {
+    if (a.businessStatus.isOpen !== b.businessStatus.isOpen) {
+      return a.businessStatus.isOpen ? -1 : 1;
+    }
+    return a.distance - b.distance;
+  });
+}
+
+// 12. 선 아이콘(Lucide SVG, stroke-width 1.75) 생성 헬퍼 (이모지 완전 배제)
+function getFeatureIconSvg(type) {
+  if (type === "outlet") {
+    return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5"></path><path d="M9 8V2"></path><path d="M15 8V2"></path><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"></path></svg>`;
+  }
+  if (type === "solo") {
+    return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`;
+  }
+  if (type === "quiet") {
+    return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="22" y1="9" x2="16" y2="15"></line><line x1="16" y1="9" x2="22" y2="15"></line></svg>`;
+  }
+  if (type === "group") {
+    return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`;
+  }
+  return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 1 1 0 8h-1"></path><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path></svg>`;
+}
+
+function buildPlaceFeatureIconsHtml(place) {
+  const features = [];
+  if (place.tags.includes("콘센트많음")) {
+    features.push({ icon: getFeatureIconSvg("outlet"), label: "콘센트" });
+  }
+  if (place.tags.includes("1인석")) {
+    features.push({ icon: getFeatureIconSvg("solo"), label: "1인석" });
+  }
+  if (place.tags.includes("조용한")) {
+    features.push({ icon: getFeatureIconSvg("quiet"), label: "조용" });
+  }
+  if (features.length < 3 && place.tags.includes("단체석")) {
+    features.push({ icon: getFeatureIconSvg("group"), label: "단체석" });
   }
 
-  if (radiusBadgeEl) {
-    if (state.radiusLimitEnabled) {
-      radiusBadgeEl.textContent = "500m 내";
-      radiusBadgeEl.classList.remove("all-mode");
+  return features
+    .slice(0, 3)
+    .map(
+      (f) =>
+        `<span class="feature-icon-item" title="${f.label}">${f.icon}<span>${f.label}</span></span>`
+    )
+    .join("");
+}
+
+// 13. 상황 카드 및 세부 조건 DOM 초기화 (최초 1회 생성 후 클래스·텍스트만 제자리 업데이트)
+function mountMoodCardsOnce() {
+  const track = document.getElementById("moodCardsTrack");
+  if (!track || track.children.length > 0) return;
+
+  const sparkleSvg = `
+    <svg class="mood-sparkle-dot" viewBox="0 0 16 16" aria-hidden="true">
+      <defs>
+        <linearGradient id="rainbowSparkleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#F26B5E" />
+          <stop offset="33%" stop-color="#F6C453" />
+          <stop offset="67%" stop-color="#4D96FF" />
+          <stop offset="100%" stop-color="#6BCB77" />
+        </linearGradient>
+      </defs>
+      <path fill="url(#rainbowSparkleGrad)" d="M8 0L9.8 6.2L16 8L9.8 9.8L8 16L6.2 9.8L0 8L6.2 6.2Z" />
+    </svg>
+  `;
+
+  MOOD_CARDS.forEach((mood) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mood-card";
+    btn.dataset.moodId = mood.id;
+    btn.setAttribute("role", "radio");
+    btn.setAttribute("aria-checked", "false");
+    btn.setAttribute("aria-label", mood.label);
+    btn.innerHTML = `
+      <span class="mood-card-text">${mood.label}</span>
+      <span class="mood-card-meta">
+        ${sparkleSvg}
+        <span class="mood-count-badge" data-mood-count="${mood.id}">0곳</span>
+      </span>
+    `;
+    track.appendChild(btn);
+  });
+}
+
+function updateMoodCardsInPlace(refDate) {
+  mountMoodCardsOnce();
+  const basePlaces = getBaseFilteredPlaces(refDate);
+
+  MOOD_CARDS.forEach((mood) => {
+    const matching = applyMoodAndDetails(
+      basePlaces,
+      mood.id,
+      state.selectedDetails,
+      refDate
+    );
+    const count = matching.length;
+    const cardEl = document.querySelector(`.mood-card[data-mood-id="${mood.id}"]`);
+    if (!cardEl) return;
+
+    const isSelected = state.selectedMood === mood.id;
+    cardEl.classList.toggle("is-selected", isSelected);
+    cardEl.classList.toggle("is-empty", count === 0 && !isSelected);
+    cardEl.setAttribute("aria-checked", isSelected ? "true" : "false");
+    cardEl.dataset.currentCount = String(count);
+
+    const countEl = cardEl.querySelector(`[data-mood-count="${mood.id}"]`);
+    if (countEl) {
+      countEl.textContent = `${count}곳`;
+    }
+  });
+
+  // 세부 조건 버튼 숫자 배지 업데이트
+  const detailBtn = document.getElementById("btnOpenDetailFilter");
+  const detailLabel = document.getElementById("detailFilterBtnLabel");
+  const activeDetailCount = state.selectedDetails.size;
+  if (detailBtn && detailLabel) {
+    detailBtn.classList.toggle("has-active", activeDetailCount > 0);
+    detailLabel.textContent =
+      activeDetailCount > 0 ? `세부 조건 ${activeDetailCount}` : "세부 조건";
+  }
+}
+
+function mountDetailChipsOnce() {
+  const grid = document.getElementById("detailChipGrid");
+  if (!grid || grid.children.length > 0) return;
+
+  DETAIL_CONDITIONS.forEach((cond) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "detail-cond-chip";
+    btn.dataset.condKey = cond.key;
+    btn.setAttribute("aria-pressed", "false");
+    btn.setAttribute("aria-label", cond.label);
+    btn.innerHTML = `
+      <span>${cond.label}</span>
+      <span class="cond-remain-count" data-cond-count="${cond.key}">0곳</span>
+    `;
+    grid.appendChild(btn);
+  });
+}
+
+function updateDetailChipsInPlace(refDate) {
+  mountDetailChipsOnce();
+  const basePlaces = getBaseFilteredPlaces(refDate);
+
+  DETAIL_CONDITIONS.forEach((cond) => {
+    const chipEl = document.querySelector(
+      `.detail-cond-chip[data-cond-key="${cond.key}"]`
+    );
+    if (!chipEl) return;
+
+    const isSelected = state.selectedDetails.has(cond.key);
+    const hypotheticalSet = new Set(state.selectedDetails);
+    hypotheticalSet.add(cond.key);
+
+    const remaining = applyMoodAndDetails(
+      basePlaces,
+      state.selectedMood,
+      hypotheticalSet,
+      refDate
+    ).length;
+
+    chipEl.classList.toggle("is-selected", isSelected);
+    chipEl.classList.toggle("is-zero", remaining === 0 && !isSelected);
+    chipEl.setAttribute("aria-pressed", isSelected ? "true" : "false");
+    chipEl.dataset.remainCount = String(remaining);
+
+    const countSpan = chipEl.querySelector(`[data-cond-count="${cond.key}"]`);
+    if (countSpan) {
+      countSpan.textContent = `${remaining}곳`;
+    }
+  });
+}
+
+// 14. 상단 헤더, 기준점 드롭다운, 요정 인사말 렌더링
+function renderControlsAndGreeting(displayedPlaces, refDate) {
+  // 캠퍼스 세그먼트
+  document.querySelectorAll(".campus-btn").forEach((btn) => {
+    const active = btn.dataset.campus === state.campus;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+
+  // 기준점 드롭다운 옵션 동기화
+  const selectAnchor = document.getElementById("selectAnchor");
+  if (selectAnchor) {
+    const anchors = CAMPUS_ANCHORS[state.campus];
+    const desiredValues = ["gps", ...anchors.map((a) => a.key)];
+    const currentValues = Array.from(selectAnchor.options).map((o) => o.value);
+    if (desiredValues.join(",") !== currentValues.join(",")) {
+      selectAnchor.innerHTML = [
+        `<option value="gps">내 위치</option>`,
+        ...anchors.map(
+          (a) => `<option value="${a.key}">${a.label}</option>`
+        ),
+      ].join("");
+    }
+    selectAnchor.value = state.anchorKey;
+  }
+
+  // 반경 드롭다운 동기화
+  const selectRadius = document.getElementById("selectRadius");
+  if (selectRadius) {
+    selectRadius.value = String(state.radiusMeters);
+  }
+
+  // 영업 중만 스위치 동기화
+  const btnOpenNow = document.getElementById("btnToggleOpenNow");
+  if (btnOpenNow) {
+    btnOpenNow.classList.toggle("active", state.openNowOnly);
+    btnOpenNow.setAttribute("aria-checked", state.openNowOnly ? "true" : "false");
+  }
+
+  // 결과 요약 (예: "영업 중 8곳")
+  const summaryEl = document.getElementById("resultCountSummary");
+  if (summaryEl) {
+    const openCount = displayedPlaces.filter((p) => p.businessStatus.isOpen).length;
+    summaryEl.textContent = `영업 중 ${openCount}곳`;
+  }
+
+  // 7-3절: 밤 1시~5시 사이에는 잠자는 요정 + 심야 응원 문구, 평소에는 삼총사 인사
+  const greetingBar = document.getElementById("fairyGreetingBar");
+  const greetingImg = document.getElementById("greetingFairyImg");
+  const greetingText = document.getElementById("greetingText");
+  if (greetingBar && greetingImg && greetingText) {
+    if (state.greetingDismissed) {
+      greetingBar.classList.add("hidden");
     } else {
-      radiusBadgeEl.textContent = "캠퍼스 전체";
-      radiusBadgeEl.classList.add("all-mode");
+      greetingBar.classList.remove("hidden");
+      const seoulParts = window.HoursEngine.getSeoulTimeParts(refDate);
+      if (seoulParts.hour >= 1 && seoulParts.hour < 5) {
+        greetingImg.src = "./assets/fairy/fairy-sleep.webp";
+        greetingText.textContent =
+          "오늘도 고생 많아요. 열려 있는 곳만 모아뒀어요.";
+      } else {
+        greetingImg.src = "./assets/fairy/fairy-trio.webp";
+        greetingText.textContent = "오늘은 어디서 공부할까요?";
+      }
     }
   }
 
-  if (toggleBtnEl) {
-    toggleBtnEl.classList.toggle("active", !state.radiusLimitEnabled);
-    toggleBtnEl.textContent = state.radiusLimitEnabled
-      ? "전체 거리순"
-      : "반경 500m만";
+  // Google AI Pro 링크 캠퍼스 UTM 업데이트
+  const ctaLink = document.getElementById("geminiCtaLink");
+  if (ctaLink) {
+    ctaLink.href = `${GEMINI_BASE_URL}&utm_content=${state.campus}_kagong`;
   }
-
-  if (!container) return;
-  const anchors = CAMPUS_ANCHORS[state.campus];
-
-  let html = `
-    <button type="button" class="anchor-btn ${state.anchorKey === "gps" ? "active" : ""}" data-anchor="gps">
-      📍 내 위치
-    </button>
-  `;
-
-  anchors.forEach((a) => {
-    const isActive = state.anchorKey === a.key;
-    html += `
-      <button type="button" class="anchor-btn ${isActive ? "active" : ""}" data-anchor="${a.key}">
-        ${a.label}
-      </button>
-    `;
-  });
-
-  container.innerHTML = html;
 }
 
-// 12. 내 위치(GPS) 요청 및 거절/인앱 차단 시 대체 처리
-function requestUserGPS() {
-  if (!navigator.geolocation) {
-    showToast("위치 기능을 지원하지 않아 거점 기준으로 표시합니다.");
+// 15. 5-3절: 컴팩트 목록 카드 렌더링 (높이 96~110px, 3줄 구성)
+function renderPlaceList(displayedPlaces) {
+  const container = document.getElementById("placeListContainer");
+  if (!container) return;
+
+  if (displayedPlaces.length === 0) {
+    const reasonText = state.openNowOnly
+      ? "여긴 아직 비어 있어요. 반경을 넓히거나 영업 종료된 곳도 함께 볼까요?"
+      : "여긴 아직 비어 있어요. 반경을 넓혀볼까요?";
+
+    container.innerHTML = `
+      <div class="empty-state-box">
+        <img
+          src="./assets/fairy/fairy-sleep.webp"
+          alt="별을 베고 졸고 있는 요정"
+          class="empty-fairy-img fairy-float"
+          width="72"
+          height="72"
+          loading="lazy"
+        />
+        <p class="empty-state-title">${reasonText}</p>
+        <p class="empty-state-sub">${state.anchorCoord.label} 기준 조건에 맞는 카페가 없어요.</p>
+        <div class="empty-action-row">
+          ${
+            state.radiusMeters !== 0
+              ? `<button type="button" class="secondary-pill-btn" id="btnEmptyExpandRadius" aria-label="탐색 반경 전체로 넓히기">반경 넓히기</button>`
+              : ""
+          }
+          ${
+            state.openNowOnly
+              ? `<button type="button" class="secondary-pill-btn" id="btnEmptyShowClosed" aria-label="영업 종료된 카페도 함께 보기">닫은 곳도 보기</button>`
+              : ""
+          }
+          ${
+            state.selectedMood || state.selectedDetails.size > 0
+              ? `<button type="button" class="secondary-pill-btn" id="btnEmptyResetFilters" aria-label="선택한 조건 초기화">조건 초기화</button>`
+              : ""
+          }
+        </div>
+      </div>
+    `;
+
+    const btnExpand = document.getElementById("btnEmptyExpandRadius");
+    if (btnExpand) {
+      btnExpand.addEventListener("click", () => {
+        state.radiusMeters = state.radiusMeters === 300 ? 500 : state.radiusMeters === 500 ? 1000 : 0;
+        renderAll();
+      });
+    }
+    const btnShowClosed = document.getElementById("btnEmptyShowClosed");
+    if (btnShowClosed) {
+      btnShowClosed.addEventListener("click", () => {
+        state.openNowOnly = false;
+        trackEvent("toggle_open_now", { open_now_only: false, source: "empty_state" });
+        renderAll();
+      });
+    }
+    const btnReset = document.getElementById("btnEmptyResetFilters");
+    if (btnReset) {
+      btnReset.addEventListener("click", () => {
+        state.selectedMood = null;
+        state.selectedDetails.clear();
+        renderAll();
+      });
+    }
     return;
   }
 
-  showToast("내 위치를 확인 중입니다...");
+  container.innerHTML = displayedPlaces
+    .map((place) => {
+      const st = place.businessStatus;
+      const isClosedCard = !st.isOpen;
+      const distText = `${state.anchorCoord.label} ${formatDistanceLabel(place.distance)}`;
+      const featureIconsHtml = buildPlaceFeatureIconsHtml(place);
+
+      const statusBadgeHtml =
+        st.state === "temp_closed"
+          ? `<span class="gray-badge">임시휴업</span>`
+          : `<span class="status-text state-${st.state}">${st.label}</span>`;
+
+      return `
+        <article
+          class="place-card ${isClosedCard ? "is-closed-card" : ""}"
+          data-place-id="${place.id}"
+          role="listitem"
+          tabindex="0"
+          aria-label="${place.name}, ${distText}, ${st.label}"
+        >
+          <div class="card-row-1">
+            <div class="card-title-group">
+              <h3 class="card-place-name">${place.name}</h3>
+            </div>
+            <span class="card-distance">${distText}</span>
+          </div>
+          <div class="card-row-2">
+            ${statusBadgeHtml}
+          </div>
+          <div class="card-row-3">
+            ${
+              featureIconsHtml
+                ? `<div class="feature-icons-group">${featureIconsHtml}</div>`
+                : ""
+            }
+            <p class="card-summary-one-line">${place.summary}</p>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+// 16. 5-3 & 3-3절: 카페 상세 시트 렌더링 (요일별 영업시간 표, 확인일/신뢰도 배지, 외부 링크, 제보 링크)
+function openPlaceDetail(placeId, panMap = true) {
+  const refDate = getEffectiveReferenceDate();
+  const activePlaces = window.HoursEngine.filterActivePlaces(state.places);
+  const rawPlace = activePlaces.find((p) => p.id === Number(placeId));
+  if (!rawPlace) return;
+
+  state.selectedPlaceId = rawPlace.id;
+
+  const distance = getDistanceMeters(
+    state.anchorCoord.lat,
+    state.anchorCoord.lng,
+    rawPlace.lat,
+    rawPlace.lng
+  );
+  const st = window.HoursEngine.getPlaceBusinessStatus(rawPlace, refDate);
+  const verifiedInfo = window.HoursEngine.evaluateVerifiedAt(
+    rawPlace.verified_at,
+    refDate
+  );
+  const weeklyRows = window.HoursEngine.getFormattedWeeklyHours(rawPlace);
+  const seoulNow = window.HoursEngine.getSeoulTimeParts(refDate);
+
+  const listView = document.getElementById("sheetListView");
+  const detailView = document.getElementById("sheetDetailView");
+  if (!listView || !detailView) return;
+
+  const naverUrl =
+    rawPlace.link ||
+    `https://map.naver.com/p/search/${encodeURIComponent(rawPlace.name)}`;
+  const kakaoQuery = encodeURIComponent(
+    `${rawPlace.campus === "seoul" ? "경희대 회기" : "경희대 영통"} ${rawPlace.name}`
+  );
+  const kakaoUrl = `https://map.kakao.com/?q=${kakaoQuery}`;
+
+  const tagsHtml = rawPlace.tags
+    .map((t) => {
+      const label = TAG_DISPLAY_LABELS[t] || t;
+      return `<span class="detail-tag-pill">${label}</span>`;
+    })
+    .join("");
+
+  const weeklyTableHtml = weeklyRows
+    .map((r) => {
+      const isToday = r.dayIndex === seoulNow.dayOfWeek;
+      return `
+        <tr class="${isToday ? "is-today" : ""} ${r.isClosed ? "is-closed-day" : ""}">
+          <td class="day-col">${r.dayLabel}${isToday ? " (오늘)" : ""}</td>
+          <td>${r.timeLabel}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const extraMetaRows = [];
+  if (rawPlace.break_time) {
+    extraMetaRows.push(`브레이크타임 ${rawPlace.break_time}`);
+  }
+  if (rawPlace.last_order) {
+    extraMetaRows.push(`라스트오더 ${rawPlace.last_order}`);
+  }
+  if (rawPlace.closed_days) {
+    extraMetaRows.push(`정기휴무 ${rawPlace.closed_days}`);
+  }
+
+  detailView.innerHTML = `
+    <div class="detail-top-bar">
+      <button type="button" class="back-list-btn" id="btnBackToList" aria-label="목록으로 돌아가기">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        <span>목록으로</span>
+      </button>
+      <div class="detail-top-actions">
+        <button type="button" class="icon-btn" id="btnDetailShare" aria-label="이 카페 공유 링크 복사">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="18" cy="5" r="3"></circle>
+            <circle cx="6" cy="12" r="3"></circle>
+            <circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="detail-header-block">
+      <div class="detail-title-row">
+        <h2 class="detail-place-name">${rawPlace.name}</h2>
+        <span class="detail-distance">${state.anchorCoord.label} ${formatDistanceLabel(distance)}</span>
+      </div>
+
+      <div class="detail-status-row">
+        ${
+          st.state === "temp_closed"
+            ? `<span class="gray-badge">임시휴업</span>`
+            : `<span class="status-text state-${st.state}">${st.label}</span>`
+        }
+        <span class="detail-verified-row">
+          <span>· ${verifiedInfo.relativeLabel}</span>
+          ${
+            verifiedInfo.isStale
+              ? `<span class="gray-badge">정보 확인 필요</span>`
+              : ""
+          }
+        </span>
+      </div>
+
+      <p class="detail-summary-text">${rawPlace.summary}</p>
+      ${tagsHtml ? `<div class="detail-tag-row">${tagsHtml}</div>` : ""}
+    </div>
+
+    <div class="detail-info-section">
+      <div class="detail-info-item">
+        <span class="detail-info-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22v-5"></path>
+            <path d="M9 8V2"></path>
+            <path d="M15 8V2"></path>
+            <path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"></path>
+          </svg>
+        </span>
+        <div class="detail-info-content">
+          <div class="detail-info-label">콘센트 및 좌석 환경</div>
+          <div class="detail-info-value">${rawPlace.outlets}</div>
+        </div>
+      </div>
+
+      <div class="detail-info-item">
+        <span class="detail-info-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </span>
+        <div class="detail-info-content">
+          <div class="detail-info-label">요일별 영업시간</div>
+          <table class="weekly-hours-table" aria-label="요일별 영업시간">
+            <tbody>${weeklyTableHtml}</tbody>
+          </table>
+          ${
+            extraMetaRows.length > 0
+              ? `<div class="detail-verified-row" style="margin-top:6px;">${extraMetaRows.join(" · ")}</div>`
+              : ""
+          }
+        </div>
+      </div>
+
+      ${
+        rawPlace.note
+          ? `
+      <div class="detail-info-item">
+        <span class="detail-info-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+        </span>
+        <div class="detail-info-content">
+          <div class="detail-info-label">참고 사항</div>
+          <div class="detail-info-value">${rawPlace.note}</div>
+        </div>
+      </div>`
+          : ""
+      }
+    </div>
+
+    <div class="detail-ext-links">
+      <a
+        href="${naverUrl}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="ext-link-btn"
+        data-ext-type="naver_map"
+        aria-label="네이버 지도에서 사진 및 방문자 후기 보기"
+      >
+        <span>네이버 지도·후기</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="7" y1="17" x2="17" y2="7"></line>
+          <polyline points="7 7 17 7 17 17"></polyline>
+        </svg>
+      </a>
+      <a
+        href="${kakaoUrl}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="ext-link-btn"
+        data-ext-type="kakao_map"
+        aria-label="카카오맵에서 후기 및 위치 보기"
+      >
+        <span>카카오맵 후기</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="7" y1="17" x2="17" y2="7"></line>
+          <polyline points="7 7 17 7 17 17"></polyline>
+        </svg>
+      </a>
+    </div>
+
+    ${
+      REPORT_FORM_URL && REPORT_FORM_URL.trim()
+        ? `
+    <div class="detail-report-row">
+      <a
+        href="${REPORT_FORM_URL.trim()}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="report-link-btn"
+        id="btnReportInfo"
+        aria-label="영업시간이나 정보가 다른 경우 제보하기"
+      >
+        <span>정보가 달라요 (수정 제보)</span>
+      </a>
+    </div>`
+        : ""
+    }
+  `;
+
+  listView.classList.add("hidden");
+  detailView.classList.remove("hidden");
+
+  // 마커 클릭 시 시트를 절반(half) 이상으로 올림
+  if (state.sheetState === "peek") {
+    setBottomSheetState("half");
+  }
+
+  highlightSelectedMarkerOnMap(rawPlace.id);
+  if (panMap && leafletMap) {
+    leafletMap.panTo([rawPlace.lat, rawPlace.lng], { animate: true });
+  }
+
+  const btnBack = document.getElementById("btnBackToList");
+  if (btnBack) {
+    btnBack.addEventListener("click", () => {
+      closePlaceDetail();
+    });
+  }
+
+  const btnDetailShare = document.getElementById("btnDetailShare");
+  if (btnDetailShare) {
+    btnDetailShare.addEventListener("click", () => {
+      copyShareLink(rawPlace.id);
+    });
+  }
+
+  const btnReport = document.getElementById("btnReportInfo");
+  if (btnReport) {
+    btnReport.addEventListener("click", (e) => {
+      e.preventDefault();
+      trackEvent("click_report", {
+        place_id: rawPlace.id,
+        place_name: rawPlace.name,
+      });
+      openReportModal(rawPlace);
+    });
+  }
+
+  detailView.querySelectorAll("a[data-ext-type]").forEach((a) => {
+    a.addEventListener("click", () => {
+      trackEvent("place_click", {
+        place_id: rawPlace.id,
+        place_name: rawPlace.name,
+        link_type: a.dataset.extType,
+      });
+    });
+  });
+}
+
+function closePlaceDetail() {
+  state.selectedPlaceId = null;
+  const listView = document.getElementById("sheetListView");
+  const detailView = document.getElementById("sheetDetailView");
+  if (listView && detailView) {
+    detailView.classList.add("hidden");
+    listView.classList.remove("hidden");
+  }
+  highlightSelectedMarkerOnMap(null);
+}
+
+// 17. 5-2절: 지도 렌더링 (CARTO Positron 타일, 요정 얼굴 기준점 핀, 선택 마커만 라벨)
+function initLeafletMapIfNeeded() {
+  if (leafletMap || typeof window.L === "undefined") return;
+
+  leafletMap = L.map("leafletMap", {
+    zoomControl: false,
+  }).setView([state.anchorCoord.lat, state.anchorCoord.lng], 15);
+
+  // 채도 낮은 밝은 지도 (OpenStreetMap + Positron 톤 저채도 필터로 API 키 워터마크 없이 깔끔하게 표현)
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  }).addTo(leafletMap);
+
+  placeMarkersLayer = L.layerGroup().addTo(leafletMap);
+
+  leafletMap.on("click", () => {
+    if (state.selectedPlaceId !== null) {
+      closePlaceDetail();
+    }
+  });
+}
+
+function highlightSelectedMarkerOnMap(selectedId) {
+  markerElementsById.forEach((wrapEl, id) => {
+    wrapEl.classList.toggle("is-selected", id === selectedId);
+  });
+}
+
+function renderMapView(displayedPlaces) {
+  initLeafletMapIfNeeded();
+  if (!leafletMap) return;
+
+  if (radiusCircle) {
+    leafletMap.removeLayer(radiusCircle);
+    radiusCircle = null;
+  }
+  if (anchorMarker) {
+    leafletMap.removeLayer(anchorMarker);
+    anchorMarker = null;
+  }
+  placeMarkersLayer.clearLayers();
+  markerElementsById.clear();
+
+  // 반경 원: 얇고 연하게
+  if (state.radiusMeters > 0) {
+    radiusCircle = L.circle([state.anchorCoord.lat, state.anchorCoord.lng], {
+      radius: state.radiusMeters,
+      color: "#111111",
+      weight: 1.2,
+      opacity: 0.25,
+      dashArray: "5, 5",
+      fillColor: "#111111",
+      fillOpacity: 0.03,
+    }).addTo(leafletMap);
+  }
+
+  // 기준점 마커: 요정 얼굴 핀 (fairy-head-pin.webp)
+  const anchorIcon = L.divIcon({
+    className: "fairy-anchor-marker",
+    html: `
+      <div class="fairy-anchor-ring">
+        <div class="fairy-anchor-inner">
+          <img src="./assets/fairy/fairy-head-pin.webp" alt="${state.anchorCoord.label} 기준점" width="30" height="30" />
+        </div>
+      </div>
+    `,
+    iconSize: [38, 38],
+    iconAnchor: [19, 19],
+  });
+
+  anchorMarker = L.marker([state.anchorCoord.lat, state.anchorCoord.lng], {
+    icon: anchorIcon,
+    zIndexOffset: 900,
+  }).addTo(leafletMap);
+
+  const cupSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 1 1 0 8h-1"></path><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path></svg>`;
+
+  displayedPlaces.forEach((place) => {
+    const st = place.businessStatus;
+    const isSelected = place.id === state.selectedPlaceId;
+    const isClosedPin = !st.isOpen;
+    const isClosingSoon = st.state === "closing_soon";
+
+    const markerHtml = `
+      <div class="cafe-map-pin-wrap ${isSelected ? "is-selected" : ""}" data-marker-id="${place.id}">
+        <span class="cafe-pin-label">${place.name}</span>
+        <div class="cafe-map-pin ${isClosedPin ? "pin-closed" : ""}">
+          ${cupSvg}
+          ${isClosingSoon ? `<span class="pin-closing-dot" title="곧 마감"></span>` : ""}
+        </div>
+      </div>
+    `;
+
+    const icon = L.divIcon({
+      className: "custom-cafe-pin-container",
+      html: markerHtml,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+
+    const marker = L.marker([place.lat, place.lng], {
+      icon,
+      zIndexOffset: isSelected ? 800 : st.isOpen ? 400 : 100,
+    }).addTo(placeMarkersLayer);
+
+    marker.on("add", () => {
+      const el = marker.getElement();
+      if (el) {
+        const wrap = el.querySelector(".cafe-map-pin-wrap");
+        if (wrap) markerElementsById.set(place.id, wrap);
+      }
+    });
+
+    marker.on("click", (e) => {
+      L.DomEvent.stopPropagation(e);
+      trackEvent("place_click", {
+        place_id: place.id,
+        place_name: place.name,
+        source: "map_marker",
+      });
+      openPlaceDetail(place.id, true);
+    });
+  });
+}
+
+// 18. 3단계 바텀시트 제어 (peek / half / full)
+function setBottomSheetState(nextState) {
+  const sheet = document.getElementById("mainBottomSheet");
+  if (!sheet) return;
+
+  state.sheetState = nextState;
+  sheet.dataset.sheetState = nextState;
+  sheet.classList.remove("sheet-peek", "sheet-half", "sheet-full");
+  sheet.classList.add(`sheet-${nextState}`);
+
+  trackEvent("view_toggle", {
+    view_mode: nextState,
+    source: "bottom_sheet",
+  });
+}
+
+function initBottomSheetDrag() {
+  const dragZone = document.getElementById("sheetDragZone");
+  const sheet = document.getElementById("mainBottomSheet");
+  if (!dragZone || !sheet) return;
+
+  let startY = null;
+  let startHeight = 0;
+  let moved = false;
+
+  const onPointerDown = (clientY) => {
+    startY = clientY;
+    startHeight = sheet.getBoundingClientRect().height;
+    moved = false;
+  };
+
+  const onPointerMove = (clientY) => {
+    if (startY === null) return;
+    const deltaY = startY - clientY;
+    if (Math.abs(deltaY) > 6) moved = true;
+  };
+
+  const onPointerUp = (clientY) => {
+    if (startY === null) return;
+    const deltaY = startY - clientY;
+    startY = null;
+
+    if (!moved) {
+      // 탭/클릭 시 단계 순환: peek -> half -> full -> half
+      if (state.sheetState === "peek") setBottomSheetState("half");
+      else if (state.sheetState === "half") setBottomSheetState("full");
+      else setBottomSheetState("peek");
+      return;
+    }
+
+    if (deltaY > 45) {
+      if (state.sheetState === "peek") setBottomSheetState("half");
+      else setBottomSheetState("full");
+    } else if (deltaY < -45) {
+      if (state.sheetState === "full") setBottomSheetState("half");
+      else setBottomSheetState("peek");
+    }
+  };
+
+  dragZone.addEventListener(
+    "touchstart",
+    (e) => {
+      if (e.touches.length === 1) onPointerDown(e.touches[0].clientY);
+    },
+    { passive: true }
+  );
+  dragZone.addEventListener(
+    "touchmove",
+    (e) => {
+      if (e.touches.length === 1) onPointerMove(e.touches[0].clientY);
+    },
+    { passive: true }
+  );
+  dragZone.addEventListener("touchend", (e) => {
+    const touch = e.changedTouches[0];
+    onPointerUp(touch ? touch.clientY : startY);
+  });
+
+  dragZone.addEventListener("mousedown", (e) => onPointerDown(e.clientY));
+  window.addEventListener("mousemove", (e) => onPointerMove(e.clientY));
+  window.addEventListener("mouseup", (e) => onPointerUp(e.clientY));
+
+  dragZone.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (state.sheetState === "peek") setBottomSheetState("half");
+      else if (state.sheetState === "half") setBottomSheetState("full");
+      else setBottomSheetState("peek");
+    }
+  });
+}
+
+// 19. 내 위치(GPS) 요청 및 로딩 표시 (fairy-fly.webp)
+function setLoadingState(visible, message = "자리 알아보는 중…") {
+  const pill = document.getElementById("loadingIndicator");
+  const textEl = document.getElementById("loadingText");
+  if (!pill) return;
+  if (textEl) textEl.textContent = message;
+  pill.classList.toggle("hidden", !visible);
+}
+
+function requestUserGPS() {
+  if (!navigator.geolocation) {
+    showToast("이 브라우저에서는 위치 기능을 지원하지 않아요.");
+    return;
+  }
+
+  setLoadingState(true, "자리 알아보는 중…");
   navigator.geolocation.getCurrentPosition(
     (pos) => {
+      setLoadingState(false);
       state.anchorKey = "gps";
       state.anchorCoord = {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
         label: "내 위치",
       };
-      showToast("내 위치 기준 반경 500m로 정렬했습니다.");
-      renderAll();
+      renderAll(true);
     },
     () => {
+      setLoadingState(false);
       const fallback = CAMPUS_ANCHORS[state.campus][0];
       state.anchorKey = fallback.key;
       state.anchorCoord = {
@@ -426,519 +1490,14 @@ function requestUserGPS() {
         lng: fallback.lng,
         label: fallback.label,
       };
-      showToast(`위치 권한이 제한되어 [${fallback.label}] 기준으로 안내합니다.`);
-      renderAll();
+      showToast("위치 권한이 꺼져 있어 정문 기준으로 보여드려요.");
+      renderAll(true);
     },
-    { enableHighAccuracy: true, timeout: 5000 }
+    { enableHighAccuracy: true, timeout: 6000 }
   );
 }
 
-// 13. 요구사항 4: 다중 선택(Multi-select) 필터 칩 렌더링 (중복 클릭 및 선택 개수 표시)
-function renderFilterChips() {
-  const container = document.getElementById("filterChipContainer");
-  if (!container) return;
-
-  let html = "";
-
-  if (state.selectedTags.size > 0) {
-    html += `<button type="button" class="filter-reset-chip" data-action="reset-filters">초기화 (${state.selectedTags.size}) ✕</button>`;
-  }
-
-  KAGONG_FILTER_TAGS.forEach((tag) => {
-    const normalized = normalizeTag(tag);
-    const isActive = state.selectedTags.has(normalized);
-    html += `
-      <button
-        type="button"
-        class="filter-chip ${isActive ? "active" : ""}"
-        data-tag="${normalized}"
-        aria-pressed="${isActive}"
-      >
-        ${isActive ? '<span class="check-mark">✓</span>' : ""}#${normalized}
-      </button>
-    `;
-  });
-
-  container.innerHTML = html;
-}
-
-// 14. 요구사항 4: 다중 선택 태그 AND 조건 필터링 및 거리순 정렬
-function getFilteredPlaces() {
-  const { campus, anchorCoord, radiusLimitEnabled, selectedTags } = state;
-  const activeTagArray = Array.from(selectedTags).map((t) => normalizeTag(t));
-
-  const baseList = state.places
-    .filter((p) => p.campus === campus && p.map === "kagong")
-    .map((p) => {
-      const distance = getDistanceMeters(
-        anchorCoord.lat,
-        anchorCoord.lng,
-        p.lat,
-        p.lng
-      );
-      return { ...p, distance };
-    });
-
-  // 선택한 모든 태그를 포함(every -> AND 교집합 조건)하는 장소만 필터링
-  const tagFiltered = baseList.filter((place) => {
-    if (activeTagArray.length === 0) return true;
-    const placeTagSet = new Set((place.tags || []).map((t) => normalizeTag(t)));
-    return activeTagArray.every((selectedTag) => placeTagSet.has(selectedTag));
-  });
-
-  tagFiltered.sort((a, b) => a.distance - b.distance);
-
-  const withinRadius = tagFiltered.filter(
-    (p) => p.distance <= DEFAULT_RADIUS_METERS
-  );
-
-  return {
-    displayed: radiusLimitEnabled ? withinRadius : tagFiltered,
-    totalInCampus: tagFiltered.length,
-    withinRadiusCount: withinRadius.length,
-  };
-}
-
-// 15. 요구사항 2 & 5: 장소 상세 카드 목록 렌더링 (메타데이터 그리드 + 사진/후기 외부 링크)
-function renderPlaceList(filteredResult) {
-  const listEl = document.getElementById("placeListContainer");
-  const countEl = document.getElementById("placeCount");
-
-  const { displayed, totalInCampus } = filteredResult;
-  if (countEl) countEl.textContent = String(displayed.length);
-
-  if (!listEl) return;
-
-  if (displayed.length === 0) {
-    const activeTagsText =
-      state.selectedTags.size > 0
-        ? `선택한 태그(${Array.from(state.selectedTags)
-            .map((t) => "#" + t)
-            .join(" + ")})를 모두 만족하는`
-        : "반경 500m 내 조건에 맞는";
-
-    listEl.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">🔭</div>
-        <h3>${activeTagsText} 카페가 없어요</h3>
-        <p>반경 제한을 해제하거나 태그 필터를 조정해 보세요! (캠퍼스 내 조건 일치 ${totalInCampus}곳)</p>
-        <button type="button" class="empty-expand-btn" id="btnEmptyExpand">
-          ${state.radiusLimitEnabled && totalInCampus > 0 ? `캠퍼스 전체 거리순 보기 (${totalInCampus}곳)` : "필터 초기화하고 전체 보기"}
-        </button>
-      </div>
-    `;
-    const expandBtn = document.getElementById("btnEmptyExpand");
-    if (expandBtn) {
-      expandBtn.addEventListener("click", () => {
-        if (state.radiusLimitEnabled && totalInCampus > 0) {
-          state.radiusLimitEnabled = false;
-        } else {
-          state.selectedTags.clear();
-          state.radiusLimitEnabled = false;
-        }
-        renderAll();
-      });
-    }
-    return;
-  }
-
-  listEl.innerHTML = displayed
-    .map((place) => {
-      const distText =
-        place.distance >= 1000
-          ? `${(place.distance / 1000).toFixed(1)}km`
-          : `${place.distance}m`;
-      const distClass = place.distance <= DEFAULT_RADIUS_METERS ? "" : "far";
-
-      const tagsHtml = place.tags
-        .map((t) => {
-          const isMatched = state.selectedTags.has(normalizeTag(t));
-          return `<span class="tag-pill ${isMatched ? "matched" : ""}">#${t}</span>`;
-        })
-        .join("");
-
-      const { naverMainUrl, photoReviewUrl, kakaoReviewUrl } =
-        buildExternalReviewLinks(place);
-
-      return `
-        <article class="place-card" data-place-id="${place.id}" data-place-name="${place.name}">
-          <div class="card-top">
-            <div class="place-name-wrap">
-              <a href="${naverMainUrl}" target="_blank" rel="noopener noreferrer" class="place-name-link">
-                <h2 class="place-name">${place.name}</h2>
-              </a>
-            </div>
-            <span class="distance-badge ${distClass}">${state.anchorCoord.label} ${distText}</span>
-          </div>
-
-          <!-- 요구사항 5: 운영 날짜 · 운영 시간 · 콘센트 유무/개수 메타데이터 영역 -->
-          <div class="place-meta-grid">
-            <div class="meta-item">
-              <span class="meta-label">🗓️ 운영 날짜</span>
-              <span class="meta-value">${place.days}</span>
-            </div>
-            <div class="meta-item">
-              <span class="meta-label">⏰ 운영 시간</span>
-              <span class="meta-value">${place.hours}</span>
-            </div>
-            <div class="meta-item outlet-full">
-              <span class="meta-label">🔌 콘센트 유무 / 좌석 환경</span>
-              <span class="meta-value">${place.outlets}</span>
-            </div>
-          </div>
-
-          <div class="gemini-summary-box">
-            <div class="gemini-badge-row">
-              <span class="gemini-badge">✨ Gemini 요약</span>
-              <span class="gemini-ai-hint">AI 카공 큐레이션</span>
-            </div>
-            <p class="gemini-summary-text">${place.summary}</p>
-          </div>
-
-          <div class="tag-list">${tagsHtml}</div>
-
-          <!-- 요구사항 2: 사진 및 후기 영역 클릭 시 네이버/카카오 실제 리뷰 페이지 새 창 이동 -->
-          <div class="review-action-row">
-            <a
-              href="${photoReviewUrl}"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="ext-action-btn photo-btn"
-              data-ext-type="naver_photo_review"
-            >
-              📸 매장 사진·후기 ↗
-            </a>
-            <a
-              href="${kakaoReviewUrl}"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="ext-action-btn review-btn"
-              data-ext-type="kakao_review"
-            >
-              ⭐ 카카오맵 후기 ↗
-            </a>
-            <a
-              href="${naverMainUrl}"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="ext-action-btn map-main-btn"
-              data-ext-type="naver_map_route"
-            >
-              🗺️ 네이버 길찾기 ↗
-            </a>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
-
-  listEl.querySelectorAll("a[target='_blank']").forEach((linkEl) => {
-    linkEl.addEventListener("click", () => {
-      const card = linkEl.closest(".place-card");
-      trackEvent("place_click", {
-        place_id: card ? Number(card.dataset.placeId) : null,
-        place_name: card ? card.dataset.placeName : "",
-        link_type: linkEl.dataset.extType || "card_title",
-        source: "list_card",
-      });
-    });
-  });
-}
-
-// 16. 요구사항 1, 2, 5: 지도 뷰 & 마커 클릭 바텀시트 (메타데이터 + 사진/후기 외부 링크 + 목록 전환 동선)
-function openMapOverlayCard(place) {
-  const overlayCard = document.getElementById("mapSelectedCard");
-  const floatingBtn = document.getElementById("btnFloatingViewToggle");
-  if (!overlayCard || !place) return;
-
-  const distText =
-    place.distance >= 1000
-      ? `${(place.distance / 1000).toFixed(1)}km`
-      : `${place.distance}m`;
-  const distClass = place.distance <= DEFAULT_RADIUS_METERS ? "" : "far";
-
-  const tagsHtml = place.tags
-    .map((t) => {
-      const isMatched = state.selectedTags.has(normalizeTag(t));
-      return `<span class="tag-pill ${isMatched ? "matched" : ""}">#${t}</span>`;
-    })
-    .join("");
-
-  const { naverMainUrl, photoReviewUrl, kakaoReviewUrl } =
-    buildExternalReviewLinks(place);
-
-  overlayCard.innerHTML = `
-    <div class="sheet-grab-bar"></div>
-    <div class="card-top">
-      <div class="place-name-wrap">
-        <strong class="place-name">${place.name}</strong>
-        <span class="distance-badge ${distClass}">${state.anchorCoord.label} ${distText}</span>
-      </div>
-      <div class="sheet-header-actions">
-        <button type="button" class="sheet-switch-list-btn" id="btnSheetToList" title="전체 목록 뷰로 전환">
-          📋 목록으로 보기
-        </button>
-        <button type="button" class="overlay-close-btn" id="btnCloseOverlayCard" aria-label="요약 카드 닫기">✕</button>
-      </div>
-    </div>
-
-    <!-- 요구사항 5: 지도 핀업 카드에도 운영 날짜·운영 시간·콘센트 메타데이터 배치 -->
-    <div class="place-meta-grid" style="margin-bottom:8px;">
-      <div class="meta-item">
-        <span class="meta-label">🗓️ 운영 날짜</span>
-        <span class="meta-value">${place.days}</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-label">⏰ 운영 시간</span>
-        <span class="meta-value">${place.hours}</span>
-      </div>
-      <div class="meta-item outlet-full">
-        <span class="meta-label">🔌 콘센트 유무 / 좌석 환경</span>
-        <span class="meta-value">${place.outlets}</span>
-      </div>
-    </div>
-
-    <div class="gemini-summary-box" style="margin-bottom:9px;padding:10px 12px;">
-      <div class="gemini-badge-row">
-        <span class="gemini-badge">✨ Gemini 요약</span>
-        <span class="gemini-ai-hint">AI 카공 큐레이션</span>
-      </div>
-      <p class="gemini-summary-text">${place.summary}</p>
-    </div>
-
-    <div class="tag-list" style="margin-bottom:9px;">${tagsHtml}</div>
-
-    <!-- 요구사항 2: 바텀시트 내 사진·후기 외부 링크 연동 -->
-    <div class="review-action-row">
-      <a
-        href="${photoReviewUrl}"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="ext-action-btn photo-btn"
-        data-ext-type="naver_photo_review"
-      >
-        📸 사진·후기 ↗
-      </a>
-      <a
-        href="${kakaoReviewUrl}"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="ext-action-btn review-btn"
-        data-ext-type="kakao_review"
-      >
-        ⭐ 카카오 후기 ↗
-      </a>
-      <a
-        href="${naverMainUrl}"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="ext-action-btn map-main-btn"
-        data-ext-type="naver_map_route"
-      >
-        🗺️ 네이버 지도 ↗
-      </a>
-    </div>
-  `;
-
-  overlayCard.classList.remove("hidden");
-  if (floatingBtn) floatingBtn.classList.add("card-open");
-
-  document.querySelectorAll(".khu-place-marker-pin").forEach((pinEl) => {
-    pinEl.classList.toggle(
-      "selected",
-      Number(pinEl.dataset.placeId) === place.id
-    );
-  });
-
-  // 바텀시트에서 [📋 목록으로 보기] 클릭 시 즉시 목록 뷰로 전환하고 해당 카드로 스크롤
-  const sheetToListBtn = document.getElementById("btnSheetToList");
-  if (sheetToListBtn) {
-    sheetToListBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      state.viewMode = "list";
-      trackEvent("view_toggle", {
-        view_mode: "list",
-        source: "map_bottom_sheet",
-      });
-      renderAll();
-      setTimeout(() => {
-        const targetCard = document.querySelector(
-          `.place-card[data-place-id="${place.id}"]`
-        );
-        if (targetCard) {
-          targetCard.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-      }, 80);
-    });
-  }
-
-  const closeBtn = document.getElementById("btnCloseOverlayCard");
-  if (closeBtn) {
-    closeBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      overlayCard.classList.add("hidden");
-      if (floatingBtn) floatingBtn.classList.remove("card-open");
-      document.querySelectorAll(".khu-place-marker-pin").forEach((pinEl) => {
-        pinEl.classList.remove("selected");
-      });
-    });
-  }
-
-  overlayCard.querySelectorAll("a[target='_blank']").forEach((extLink) => {
-    extLink.addEventListener("click", () => {
-      trackEvent("place_click", {
-        place_id: place.id,
-        place_name: place.name,
-        link_type: extLink.dataset.extType || "sheet_external",
-        source: "map_bottom_sheet",
-      });
-    });
-  });
-}
-
-function renderMapView(filteredResult) {
-  const mapWrap = document.getElementById("mapViewContainer");
-  const listWrap = document.getElementById("placeListContainer");
-  const overlayCard = document.getElementById("mapSelectedCard");
-  const floatingBtn = document.getElementById("btnFloatingViewToggle");
-
-  // 상단 [지도 / 목록] 탭 및 하단 플로팅 캡슐 버튼 텍스트 동기화
-  document.querySelectorAll(".view-toggle-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.view === state.viewMode);
-  });
-
-  if (floatingBtn) {
-    floatingBtn.innerHTML =
-      state.viewMode === "map"
-        ? `📋 카페 목록 보기 (${filteredResult.displayed.length}곳)`
-        : "🗺️ 지도 화면 보기";
-    floatingBtn.classList.remove("card-open");
-  }
-
-  if (!mapWrap || !listWrap) return;
-
-  if (state.viewMode !== "map") {
-    mapWrap.classList.add("hidden");
-    listWrap.classList.remove("hidden");
-    if (overlayCard) overlayCard.classList.add("hidden");
-    return;
-  }
-
-  listWrap.classList.add("hidden");
-  mapWrap.classList.remove("hidden");
-
-  if (!leafletMap && typeof window.L !== "undefined") {
-    leafletMap = L.map("leafletMap", {
-      zoomControl: true,
-    }).setView([state.anchorCoord.lat, state.anchorCoord.lng], 15);
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap",
-    }).addTo(leafletMap);
-
-    placeMarkersLayer = L.layerGroup().addTo(leafletMap);
-
-    leafletMap.on("click", () => {
-      if (overlayCard) overlayCard.classList.add("hidden");
-      if (floatingBtn) floatingBtn.classList.remove("card-open");
-      document.querySelectorAll(".khu-place-marker-pin").forEach((pinEl) => {
-        pinEl.classList.remove("selected");
-      });
-    });
-  }
-
-  if (!leafletMap) return;
-
-  if (radiusCircle) {
-    leafletMap.removeLayer(radiusCircle);
-  }
-  if (anchorMarker) {
-    leafletMap.removeLayer(anchorMarker);
-  }
-  placeMarkersLayer.clearLayers();
-  if (overlayCard) overlayCard.classList.add("hidden");
-
-  radiusCircle = L.circle([state.anchorCoord.lat, state.anchorCoord.lng], {
-    radius: DEFAULT_RADIUS_METERS,
-    color: "#4F46E5",
-    weight: 2,
-    dashArray: "6, 4",
-    fillColor: "#6366F1",
-    fillOpacity: 0.11,
-  }).addTo(leafletMap);
-
-  const anchorIcon = L.divIcon({
-    className: "custom-anchor-icon",
-    html: `<div class="khu-anchor-pin">📍 ${state.anchorCoord.label} 기준</div>`,
-    iconSize: [96, 26],
-    iconAnchor: [48, 13],
-  });
-  anchorMarker = L.marker([state.anchorCoord.lat, state.anchorCoord.lng], {
-    icon: anchorIcon,
-    zIndexOffset: 1000,
-  }).addTo(leafletMap);
-
-  const markersById = new Map();
-
-  filteredResult.displayed.forEach((place) => {
-    const shortName =
-      place.name.length > 7 ? `${place.name.slice(0, 6)}…` : place.name;
-    const placeIcon = L.divIcon({
-      className: "custom-place-divicon",
-      html: `<div class="khu-place-marker-pin" data-place-id="${place.id}"><span class="pin-emoji">☕</span><span>${shortName}</span></div>`,
-      iconSize: [92, 24],
-      iconAnchor: [46, 12],
-    });
-
-    const marker = L.marker([place.lat, place.lng], {
-      icon: placeIcon,
-    }).addTo(placeMarkersLayer);
-
-    marker.on("click", (e) => {
-      L.DomEvent.stopPropagation(e);
-      openMapOverlayCard(place);
-      leafletMap.panTo([place.lat, place.lng], { animate: true });
-      trackEvent("place_click", {
-        place_id: place.id,
-        place_name: place.name,
-        source: "map_marker",
-      });
-    });
-
-    markersById.set(place.id, { marker, place });
-  });
-
-  setTimeout(() => {
-    leafletMap.invalidateSize();
-    if (radiusCircle) {
-      leafletMap.fitBounds(radiusCircle.getBounds(), { padding: [14, 14] });
-    } else {
-      leafletMap.setView([state.anchorCoord.lat, state.anchorCoord.lng], 15);
-    }
-
-    if (state.initialMarkerId && markersById.has(state.initialMarkerId)) {
-      const target = markersById.get(state.initialMarkerId);
-      openMapOverlayCard(target.place);
-      state.initialMarkerId = null;
-    }
-  }, 60);
-}
-
-// 17. 전체 UI 통합 렌더링
-function renderAll() {
-  updateURLParams();
-  renderHeader();
-  renderAnchorControls();
-  renderFilterChips();
-  updateFixedCTA();
-
-  const filteredResult = getFilteredPlaces();
-  renderPlaceList(filteredResult);
-  renderMapView(filteredResult);
-}
-
-// 18. 요구사항 3: 정규 도메인(https://korewajiyuda.github.io/khu_kagongmap/) 공유 및 클립보드 복사
+// 20. 공유 링크 복사 및 인앱/A2HS 안내 시트
 function showToast(msg) {
   const toastEl = document.getElementById("toastPopup");
   if (!toastEl) return;
@@ -950,8 +1509,8 @@ function showToast(msg) {
   }, 2400);
 }
 
-async function copyShareLink() {
-  const targetUrl = getCanonicalShareUrl();
+async function copyShareLink(placeId = null) {
+  const targetUrl = getCanonicalShareUrl(placeId);
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(targetUrl);
@@ -966,10 +1525,9 @@ async function copyShareLink() {
     document.execCommand("copy");
     document.body.removeChild(tempInput);
   }
-  showToast(`카공맵 주소가 복사되었어요! (${targetUrl})`);
+  showToast("카공맵 링크가 복사되었어요.");
 }
 
-// 19. 인앱 브라우저 감지 및 홈 화면 추가(A2HS) 바텀시트 팝업
 function isInAppBrowser() {
   const ua = navigator.userAgent || "";
   return /Instagram|KAKAOTALK|everytime|NAVER|Line|FBAN|FBAV/i.test(ua);
@@ -980,115 +1538,112 @@ function showA2HSPopup(forceInAppMode = false) {
   const titleEl = document.getElementById("a2hsTitle");
   const subtitleEl = document.getElementById("a2hsSubtitle");
   const bodyEl = document.getElementById("a2hsInstructionBody");
-
   if (!modal || !bodyEl) return;
 
   const inApp = forceInAppMode === true || isInAppBrowser();
-
   if (inApp) {
     if (titleEl) {
-      titleEl.textContent =
-        "인스타·카톡에서는 위치 권한과 홈 화면 추가가 제한돼요!";
+      titleEl.textContent = "외부 브라우저로 열면 더 편해요";
     }
     if (subtitleEl) {
       subtitleEl.textContent =
-        "외부 브라우저(Safari·Chrome)로 열면 내 위치 500m 탐색과 홈 화면 바로가기를 쓸 수 있어요.";
+        "인스타그램·카카오톡 인앱 브라우저에서는 내 위치 탐색과 홈 화면 추가가 제한될 수 있어요.";
     }
     bodyEl.innerHTML = `
       <ol class="a2hs-steps">
-        <li>
-          <span class="step-num">1</span>
-          <span>화면 우측 상단 또는 하단의 <strong>[⋯] 메뉴 버튼</strong>을 눌러주세요.</span>
-        </li>
-        <li>
-          <span class="step-num">2</span>
-          <span><strong>[다른 브라우저로 열기]</strong> (Safari / Chrome)를 선택해 주세요.</span>
-        </li>
-        <li>
-          <span class="step-num">3</span>
-          <span>브라우저 메뉴에서 공유 후 <strong>[홈 화면에 추가]</strong>를 누르면 1초 만에 접속 끝!</span>
-        </li>
+        <li><span class="step-num">1</span><span>우측 상단 또는 하단의 <strong>메뉴(⋯)</strong> 버튼을 눌러주세요.</span></li>
+        <li><span class="step-num">2</span><span><strong>다른 브라우저로 열기(Safari / Chrome)</strong>를 선택해 주세요.</span></li>
+        <li><span class="step-num">3</span><span>브라우저 공유 메뉴에서 <strong>홈 화면에 추가</strong>를 누르면 바로가기가 만들어져요.</span></li>
       </ol>
     `;
   } else {
     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
     if (titleEl) {
-      titleEl.textContent = "경희대 카공맵을 홈 화면에 추가해 보세요!";
+      titleEl.textContent = "홈 화면에 카공맵 추가하기";
     }
     if (subtitleEl) {
       subtitleEl.textContent =
-        "시험기간·공강 때마다 앱처럼 1초 만에 내 주변 카공 카페를 찾을 수 있어요.";
+        "시험기간·공강 때마다 앱처럼 바로 열어 내 주변 카공 카페를 확인할 수 있어요.";
     }
-    if (isIOS) {
-      bodyEl.innerHTML = `
-        <ol class="a2hs-steps">
-          <li>
-            <span class="step-num">1</span>
-            <span>Safari 하단 바의 <strong>[공유 버튼 ⬆️]</strong>을 눌러주세요.</span>
-          </li>
-          <li>
-            <span class="step-num">2</span>
-            <span>메뉴에서 <strong>[홈 화면에 추가]</strong>를 누르면 바탕화면에 카공맵 아이콘이 생겨요!</span>
-          </li>
-        </ol>
-      `;
-    } else {
-      bodyEl.innerHTML = `
-        <ol class="a2hs-steps">
-          <li>
-            <span class="step-num">1</span>
-            <span>Chrome 우측 상단 <strong>[⋮ 메뉴]</strong> 버튼을 눌러주세요.</span>
-          </li>
-          <li>
-            <span class="step-num">2</span>
-            <span><strong>[홈 화면에 추가]</strong> 또는 <strong>[앱 설치]</strong>를 선택하면 바로가기가 생성돼요!</span>
-          </li>
-        </ol>
-      `;
-    }
+    bodyEl.innerHTML = isIOS
+      ? `
+      <ol class="a2hs-steps">
+        <li><span class="step-num">1</span><span>Safari 하단 바의 <strong>공유 버튼</strong>을 눌러주세요.</span></li>
+        <li><span class="step-num">2</span><span>메뉴에서 <strong>홈 화면에 추가</strong>를 선택하면 완료돼요.</span></li>
+      </ol>`
+      : `
+      <ol class="a2hs-steps">
+        <li><span class="step-num">1</span><span>브라우저 우측 상단 <strong>메뉴(⋮)</strong> 버튼을 눌러주세요.</span></li>
+        <li><span class="step-num">2</span><span><strong>홈 화면에 추가</strong> 또는 <strong>앱 설치</strong>를 선택하면 완료돼요.</span></li>
+      </ol>`;
   }
 
   modal.classList.remove("hidden");
-  trackEvent("a2hs_shown", {
-    in_app: inApp,
-    forced_test: Boolean(forceInAppMode),
-  });
+  trackEvent("a2hs_shown", { in_app: inApp });
 }
 
 window.showA2HSPopup = showA2HSPopup;
 
-function initA2HSTrigger() {
-  const visitCount =
-    Number(localStorage.getItem("khu_rescue_visits") || "0") + 1;
-  localStorage.setItem("khu_rescue_visits", String(visitCount));
-  const shownThisSession =
-    sessionStorage.getItem("khu_a2hs_shown_session") === "1";
+// 20-2. 3-3절: "정보가 달라요" 수정 제보 시트 열기 및 클립보드 복사 연동
+let currentReportPlace = null;
+let selectedReportType = "영업시간·휴무일이 달라요";
 
-  if (shownThisSession) return;
+function openReportModal(place) {
+  currentReportPlace = place;
+  const modal = document.getElementById("reportModal");
+  const titleEl = document.getElementById("reportModalTitle");
+  const noteInput = document.getElementById("reportNoteInput");
+  if (!modal) {
+    if (REPORT_FORM_URL && REPORT_FORM_URL.trim()) {
+      window.open(REPORT_FORM_URL.trim(), "_blank", "noopener,noreferrer");
+    }
+    return;
+  }
 
-  if (visitCount >= 2) {
-    sessionStorage.setItem("khu_a2hs_shown_session", "1");
+  if (titleEl && place) {
+    titleEl.textContent = `${place.name} · 정보가 달라요`;
+  }
+  if (noteInput) {
+    noteInput.value = "";
+  }
+  modal.classList.remove("hidden");
+}
+
+// 21. 전체 UI 통합 렌더링
+function renderAll(recenterMap = false) {
+  updateURLParams();
+  const refDate = getEffectiveReferenceDate();
+  const displayedPlaces = getSortedDisplayPlaces(refDate);
+
+  renderControlsAndGreeting(displayedPlaces, refDate);
+  updateMoodCardsInPlace(refDate);
+  updateDetailChipsInPlace(refDate);
+  renderPlaceList(displayedPlaces);
+  renderMapView(displayedPlaces);
+
+  if (state.selectedPlaceId !== null) {
+    openPlaceDetail(state.selectedPlaceId, false);
+  }
+
+  if (recenterMap && leafletMap) {
     setTimeout(() => {
-      showA2HSPopup(false);
-    }, 1000);
-  } else {
-    setTimeout(() => {
-      if (sessionStorage.getItem("khu_a2hs_shown_session") !== "1") {
-        sessionStorage.setItem("khu_a2hs_shown_session", "1");
-        showA2HSPopup(false);
+      leafletMap.invalidateSize();
+      if (radiusCircle) {
+        leafletMap.fitBounds(radiusCircle.getBounds(), { padding: [20, 20] });
+      } else {
+        leafletMap.setView([state.anchorCoord.lat, state.anchorCoord.lng], 15);
       }
-    }, 30000);
+    }, 50);
   }
 }
 
-// 20. 이벤트 바인딩 (이벤트 위임으로 다중 태그 및 기준점 클릭 안정성 보장)
+// 22. 이벤트 바인딩
 function bindEvents() {
-  // 캠퍼스 세그먼트 컨트롤 전환 [서울캠 / 국제캠]
+  // 캠퍼스 세그먼트 전환
   document.querySelectorAll(".campus-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const nextCampus = btn.dataset.campus;
-      if (nextCampus === state.campus) return;
-
+      if (!nextCampus || nextCampus === state.campus) return;
       state.campus = nextCampus;
       const defaultAnchor = CAMPUS_ANCHORS[state.campus][0];
       state.anchorKey = defaultAnchor.key;
@@ -1097,24 +1652,187 @@ function bindEvents() {
         lng: defaultAnchor.lng,
         label: defaultAnchor.label,
       };
-      state.radiusLimitEnabled = true;
-
+      closePlaceDetail();
       trackEvent("campus_change", { campus: state.campus });
-      renderAll();
+      renderAll(true);
     });
   });
 
-  // 기준점 버튼 컨테이너 이벤트 위임
-  const anchorContainer = document.getElementById("anchorButtonGroup");
-  if (anchorContainer) {
-    anchorContainer.addEventListener("click", (e) => {
-      const btn = e.target.closest(".anchor-btn");
-      if (!btn) return;
-      const key = btn.dataset.anchor;
-      if (key === "gps") {
+  // 상단 메뉴 버튼 & 드롭다운
+  const btnHeaderMenu = document.getElementById("btnHeaderMenu");
+  const menuDropdown = document.getElementById("headerMenuDropdown");
+  if (btnHeaderMenu && menuDropdown) {
+    btnHeaderMenu.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isHidden = menuDropdown.classList.toggle("hidden");
+      btnHeaderMenu.setAttribute("aria-expanded", !isHidden ? "true" : "false");
+    });
+    document.addEventListener("click", () => {
+      menuDropdown.classList.add("hidden");
+      btnHeaderMenu.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  // 메뉴 항목: 공유 / 홈 화면 추가 / Google AI Pro 혜택
+  const btnMenuShare = document.getElementById("btnMenuShare");
+  if (btnMenuShare) {
+    btnMenuShare.addEventListener("click", () => copyShareLink());
+  }
+
+  const btnMenuA2HS = document.getElementById("btnMenuA2HS");
+  if (btnMenuA2HS) {
+    btnMenuA2HS.addEventListener("click", () => showA2HSPopup(false));
+  }
+
+  const offerModal = document.getElementById("geminiOfferModal");
+  const openOfferModal = (source) => {
+    if (!offerModal) return;
+    offerModal.classList.remove("hidden");
+    trackEvent("cta_click", {
+      campus: state.campus,
+      utm_content: `${state.campus}_kagong`,
+      source,
+    });
+  };
+
+  const btnMenuOffer = document.getElementById("btnMenuOffer");
+  if (btnMenuOffer) {
+    btnMenuOffer.addEventListener("click", () => openOfferModal("header_menu"));
+  }
+
+  const btnOpenOfferFromList = document.getElementById("btnOpenOfferFromList");
+  if (btnOpenOfferFromList) {
+    btnOpenOfferFromList.addEventListener("click", () =>
+      openOfferModal("sheet_subtle_banner")
+    );
+  }
+
+  const btnCloseOfferSheet = document.getElementById("btnCloseOfferSheet");
+  if (btnCloseOfferSheet && offerModal) {
+    btnCloseOfferSheet.addEventListener("click", () =>
+      offerModal.classList.add("hidden")
+    );
+    offerModal.addEventListener("click", (e) => {
+      if (e.target === offerModal) offerModal.classList.add("hidden");
+    });
+  }
+
+  // 요정 인사말 닫기
+  const btnDismissGreeting = document.getElementById("btnDismissGreeting");
+  if (btnDismissGreeting) {
+    btnDismissGreeting.addEventListener("click", () => {
+      state.greetingDismissed = true;
+      const bar = document.getElementById("fairyGreetingBar");
+      if (bar) bar.classList.add("hidden");
+    });
+  }
+
+  // 4-1절: 상황 카드 클릭 (한 번에 하나만 선택, 다시 누르면 해제, 0곳 카드는 안내만 표시)
+  const moodTrack = document.getElementById("moodCardsTrack");
+  if (moodTrack) {
+    moodTrack.addEventListener("click", (e) => {
+      const card = e.target.closest(".mood-card");
+      if (!card) return;
+
+      const moodId = card.dataset.moodId;
+      const count = Number(card.dataset.currentCount || "0");
+
+      if (state.selectedMood === moodId) {
+        state.selectedMood = null;
+        trackEvent("select_mood", { mood: "none" });
+        renderAll(false);
+        return;
+      }
+
+      if (count === 0) {
+        showToast("아직 등록된 곳이 없어요");
+        trackEvent("select_mood", { mood: moodId, empty: true });
+        return;
+      }
+
+      state.selectedMood = moodId;
+      closePlaceDetail();
+      trackEvent("select_mood", { mood: moodId, count });
+      renderAll(false);
+    });
+  }
+
+  // 4-2절: 세부 조건 모달 열기/닫기/선택/초기화
+  const detailModal = document.getElementById("detailFilterModal");
+  const btnOpenDetail = document.getElementById("btnOpenDetailFilter");
+  const btnCloseDetail = document.getElementById("btnCloseDetailFilter");
+  const btnApplyDetail = document.getElementById("btnApplyDetailFilter");
+  const btnResetDetail = document.getElementById("btnResetDetailFilters");
+  const detailGrid = document.getElementById("detailChipGrid");
+
+  if (btnOpenDetail && detailModal) {
+    btnOpenDetail.addEventListener("click", () => {
+      updateDetailChipsInPlace(getEffectiveReferenceDate());
+      detailModal.classList.remove("hidden");
+      trackEvent("open_detail_filters", {
+        active_count: state.selectedDetails.size,
+      });
+    });
+  }
+
+  if (btnCloseDetail && detailModal) {
+    btnCloseDetail.addEventListener("click", () =>
+      detailModal.classList.add("hidden")
+    );
+    detailModal.addEventListener("click", (e) => {
+      if (e.target === detailModal) detailModal.classList.add("hidden");
+    });
+  }
+
+  if (btnApplyDetail && detailModal) {
+    btnApplyDetail.addEventListener("click", () =>
+      detailModal.classList.add("hidden")
+    );
+  }
+
+  if (btnResetDetail) {
+    btnResetDetail.addEventListener("click", () => {
+      state.selectedDetails.clear();
+      trackEvent("filter_click", { action: "reset_detail_filters" });
+      renderAll(false);
+    });
+  }
+
+  if (detailGrid) {
+    detailGrid.addEventListener("click", (e) => {
+      const chip = e.target.closest(".detail-cond-chip");
+      if (!chip) return;
+      const key = chip.dataset.condKey;
+      const remainCount = Number(chip.dataset.remainCount || "0");
+
+      if (state.selectedDetails.has(key)) {
+        state.selectedDetails.delete(key);
+      } else {
+        if (remainCount === 0) {
+          showToast("선택 시 조건에 맞는 카페가 0곳이 돼요.");
+          return;
+        }
+        state.selectedDetails.add(key);
+      }
+
+      trackEvent("filter_click", {
+        tag: key,
+        active_tags: Array.from(state.selectedDetails).join(","),
+        active_count: state.selectedDetails.size,
+      });
+      renderAll(false);
+    });
+  }
+
+  // 기준점 드롭다운 변경
+  const selectAnchor = document.getElementById("selectAnchor");
+  if (selectAnchor) {
+    selectAnchor.addEventListener("change", () => {
+      const val = selectAnchor.value;
+      if (val === "gps") {
         requestUserGPS();
       } else {
-        const found = CAMPUS_ANCHORS[state.campus].find((x) => x.key === key);
+        const found = CAMPUS_ANCHORS[state.campus].find((a) => a.key === val);
         if (found) {
           state.anchorKey = found.key;
           state.anchorCoord = {
@@ -1122,180 +1840,215 @@ function bindEvents() {
             lng: found.lng,
             label: found.label,
           };
-          renderAll();
+          closePlaceDetail();
+          renderAll(true);
         }
       }
     });
   }
 
-  // 요구사항 4: 다중 선택 필터 칩 컨테이너 이벤트 위임 (중복 클릭 시 Set에 추가/제거)
-  const filterContainer = document.getElementById("filterChipContainer");
-  if (filterContainer) {
-    filterContainer.addEventListener("click", (e) => {
-      const resetBtn = e.target.closest("[data-action='reset-filters']");
-      if (resetBtn) {
-        state.selectedTags.clear();
-        renderAll();
-        return;
+  // 반경 드롭다운 변경 (300m / 500m / 1km / 전체)
+  const selectRadius = document.getElementById("selectRadius");
+  if (selectRadius) {
+    selectRadius.addEventListener("change", () => {
+      state.radiusMeters = Number(selectRadius.value);
+      closePlaceDetail();
+      renderAll(true);
+    });
+  }
+
+  // 언제 갈 거예요? 시간 선택 변경
+  const selectVisitTime = document.getElementById("selectVisitTime");
+  const customTimeInput = document.getElementById("customTimeInput");
+  if (selectVisitTime) {
+    selectVisitTime.addEventListener("change", () => {
+      state.visitTimeMode = selectVisitTime.value;
+      if (customTimeInput) {
+        customTimeInput.classList.toggle(
+          "hidden",
+          state.visitTimeMode !== "custom"
+        );
       }
+      trackEvent("change_visit_time", {
+        mode: state.visitTimeMode,
+        custom_time: state.customTimeValue,
+      });
+      renderAll(false);
+    });
+  }
 
-      const chip = e.target.closest(".filter-chip");
-      if (!chip) return;
+  if (customTimeInput) {
+    customTimeInput.addEventListener("change", () => {
+      state.customTimeValue = customTimeInput.value || "23:00";
+      trackEvent("change_visit_time", {
+        mode: "custom",
+        custom_time: state.customTimeValue,
+      });
+      renderAll(false);
+    });
+  }
 
-      const tag = normalizeTag(chip.dataset.tag);
-      if (!tag) return;
+  // 지금 영업 중만 토글
+  const btnToggleOpenNow = document.getElementById("btnToggleOpenNow");
+  if (btnToggleOpenNow) {
+    btnToggleOpenNow.addEventListener("click", () => {
+      state.openNowOnly = !state.openNowOnly;
+      trackEvent("toggle_open_now", { open_now_only: state.openNowOnly });
+      renderAll(false);
+    });
+  }
 
-      if (state.selectedTags.has(tag)) {
-        state.selectedTags.delete(tag);
-      } else {
-        state.selectedTags.add(tag);
+  // 목록 카드 클릭 -> 상세 시트 오픈
+  const listContainer = document.getElementById("placeListContainer");
+  if (listContainer) {
+    listContainer.addEventListener("click", (e) => {
+      const card = e.target.closest(".place-card");
+      if (!card) return;
+      const id = Number(card.dataset.placeId);
+      trackEvent("place_click", {
+        place_id: id,
+        source: "sheet_list_card",
+      });
+      openPlaceDetail(id, true);
+    });
+
+    listContainer.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        const card = e.target.closest(".place-card");
+        if (!card) return;
+        e.preventDefault();
+        openPlaceDetail(Number(card.dataset.placeId), true);
       }
-
-      trackEvent("filter_click", {
-        tag,
-        active_tags: Array.from(state.selectedTags).join(","),
-        active_count: state.selectedTags.size,
-      });
-      renderAll();
     });
   }
 
-  // 반경 500m <-> 전체 거리순 보기 토글
-  const radiusToggleBtn = document.getElementById("btnToggleRadius");
-  if (radiusToggleBtn) {
-    radiusToggleBtn.addEventListener("click", () => {
-      state.radiusLimitEnabled = !state.radiusLimitEnabled;
-      renderAll();
+  // 지도 우측 하단 커스텀 버튼 (내 위치 / 확대 / 축소)
+  const btnMyLoc = document.getElementById("btnMapMyLocation");
+  if (btnMyLoc) {
+    btnMyLoc.addEventListener("click", () => requestUserGPS());
+  }
+  const btnZoomIn = document.getElementById("btnMapZoomIn");
+  if (btnZoomIn) {
+    btnZoomIn.addEventListener("click", () => {
+      if (leafletMap) leafletMap.zoomIn();
+    });
+  }
+  const btnZoomOut = document.getElementById("btnMapZoomOut");
+  if (btnZoomOut) {
+    btnZoomOut.addEventListener("click", () => {
+      if (leafletMap) leafletMap.zoomOut();
     });
   }
 
-  // 상단 [지도 / 목록] 탭 전환
-  document.querySelectorAll(".view-toggle-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const nextView = btn.dataset.view;
-      if (!nextView || nextView === state.viewMode) return;
-      state.viewMode = nextView;
-      trackEvent("view_toggle", {
-        view_mode: state.viewMode,
-        source: "toolbar_tab",
-      });
-      renderAll();
-    });
-  });
-
-  // 하단 다크 캡슐 플로팅 버튼 [📋 카페 목록 보기 ↔ 🗺️ 지도 화면 보기]
-  const floatingToggleBtn = document.getElementById("btnFloatingViewToggle");
-  if (floatingToggleBtn) {
-    floatingToggleBtn.addEventListener("click", () => {
-      state.viewMode = state.viewMode === "map" ? "list" : "map";
-      trackEvent("view_toggle", {
-        view_mode: state.viewMode,
-        source: "floating_capsule",
-      });
-      renderAll();
-    });
-  }
-
-  // 요구사항 3: 정규 도메인 링크 복사/공유 버튼
-  const btnShare = document.getElementById("btnShare");
-  const btnFooterShare = document.getElementById("btnFooterShare");
+  // A2HS 모달 닫기 및 복사
+  const a2hsModal = document.getElementById("a2hsModal");
+  const btnCloseA2HS = document.getElementById("btnCloseA2HS");
   const btnA2HSCopyLink = document.getElementById("btnA2HSCopyLink");
-
-  if (btnShare) btnShare.addEventListener("click", () => copyShareLink());
-  if (btnFooterShare)
-    btnFooterShare.addEventListener("click", () => copyShareLink());
+  if (btnCloseA2HS && a2hsModal) {
+    btnCloseA2HS.addEventListener("click", () =>
+      a2hsModal.classList.add("hidden")
+    );
+    a2hsModal.addEventListener("click", (e) => {
+      if (e.target === a2hsModal) a2hsModal.classList.add("hidden");
+    });
+  }
   if (btnA2HSCopyLink) {
     btnA2HSCopyLink.addEventListener("click", () => copyShareLink());
   }
 
-  // 하단 고정 CTA 버튼 클릭 -> 신청 & 오류 해결 가이드 3편 바텀시트 오픈
-  const btnOpenOfferSheet = document.getElementById("btnOpenGeminiOfferSheet");
-  const btnCloseOfferSheet = document.getElementById("btnCloseOfferSheet");
-  const offerModal = document.getElementById("geminiOfferModal");
-  const ctaLink = document.getElementById("geminiCtaLink");
+  // 3-3절: 정보가 달라요 (제보 모달) 이벤트 바인딩
+  const reportModal = document.getElementById("reportModal");
+  const btnCloseReportModal = document.getElementById("btnCloseReportModal");
+  const reportTypeGrid = document.getElementById("reportTypeGrid");
+  const btnSubmitReportSheet = document.getElementById("btnSubmitReportSheet");
+  const reportNoteInput = document.getElementById("reportNoteInput");
 
-  if (btnOpenOfferSheet && offerModal) {
-    btnOpenOfferSheet.addEventListener("click", () => {
-      offerModal.classList.remove("hidden");
-      trackEvent("cta_click", {
-        campus: state.campus,
-        map: "kagong",
-        utm_content: `${state.campus}_kagong`,
-        action: "open_offer_sheet",
+  if (btnCloseReportModal && reportModal) {
+    btnCloseReportModal.addEventListener("click", () =>
+      reportModal.classList.add("hidden")
+    );
+    reportModal.addEventListener("click", (e) => {
+      if (e.target === reportModal) reportModal.classList.add("hidden");
+    });
+  }
+
+  if (reportTypeGrid) {
+    reportTypeGrid.addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-report-type]");
+      if (!chip) return;
+      selectedReportType = chip.dataset.reportType;
+      reportTypeGrid.querySelectorAll("[data-report-type]").forEach((el) => {
+        el.classList.toggle("is-selected", el === chip);
       });
     });
   }
 
-  if (btnCloseOfferSheet && offerModal) {
-    btnCloseOfferSheet.addEventListener("click", () => {
-      offerModal.classList.add("hidden");
-    });
-    offerModal.addEventListener("click", (e) => {
-      if (e.target === offerModal) {
-        offerModal.classList.add("hidden");
+  if (btnSubmitReportSheet) {
+    btnSubmitReportSheet.addEventListener("click", async () => {
+      const placeName = currentReportPlace ? currentReportPlace.name : "카페";
+      const campusLabel =
+        currentReportPlace && currentReportPlace.campus === "global"
+          ? "국제캠"
+          : "서울캠";
+      const noteText = reportNoteInput ? reportNoteInput.value.trim() : "";
+      const summaryLine = `[카공맵 정보 수정 제보] (${campusLabel}) ${placeName} - ${selectedReportType}${
+        noteText ? ` : ${noteText}` : ""
+      }`;
+
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(summaryLine);
+        }
+      } catch {
+        // clipboard fallback 생략 가능
       }
-    });
-  }
 
-  if (ctaLink) {
-    ctaLink.addEventListener("click", () => {
-      trackEvent("cta_click", {
-        campus: state.campus,
-        map: "kagong",
-        utm_content: `${state.campus}_kagong`,
-        action: "proceed_to_gemini_offer",
-      });
-    });
-  }
+      showToast("제보 내용이 복사되었어요. 시트 또는 폼에 붙여넣어 주세요!");
+      if (reportModal) reportModal.classList.add("hidden");
 
-  document.querySelectorAll(".ts-guide-item").forEach((item) => {
-    item.addEventListener("click", () => {
-      trackEvent("cta_click", {
-        campus: state.campus,
-        map: "kagong",
-        action: "troubleshooting_guide_click",
-        guide_step: item.dataset.guide,
-      });
-    });
-  });
-
-  // A2HS 바텀시트 열기/닫기
-  const btnOpenA2HS = document.getElementById("btnOpenA2HS");
-  const btnCloseA2HS = document.getElementById("btnCloseA2HS");
-  const a2hsModal = document.getElementById("a2hsModal");
-
-  if (btnOpenA2HS) {
-    btnOpenA2HS.addEventListener("click", () => showA2HSPopup(false));
-  }
-  if (btnCloseA2HS && a2hsModal) {
-    btnCloseA2HS.addEventListener("click", () => {
-      a2hsModal.classList.add("hidden");
-    });
-    a2hsModal.addEventListener("click", (e) => {
-      if (e.target === a2hsModal) {
-        a2hsModal.classList.add("hidden");
+      if (REPORT_FORM_URL && REPORT_FORM_URL.trim()) {
+        window.open(REPORT_FORM_URL.trim(), "_blank", "noopener,noreferrer");
       }
     });
   }
 }
 
+// 23. 앱 초기화 및 1분 주기 영업시간 상태 갱신
 async function initApp() {
+  initGA4();
   syncStateFromURL();
+  mountMoodCardsOnce();
+  mountDetailChipsOnce();
+  initBottomSheetDrag();
   bindEvents();
 
+  setLoadingState(true, "자리 알아보는 중…");
   try {
     state.places = await loadPlacesData();
   } catch (err) {
-    console.error("카공 카페 데이터를 불러오는데 실패했습니다:", err);
+    console.error("데이터 로드 오류:", err);
+  } finally {
+    setLoadingState(false);
   }
 
-  renderAll();
+  renderAll(true);
+
+  const params = new URLSearchParams(window.location.search);
+  const initialPlaceId = Number(params.get("place"));
+  if (initialPlaceId) {
+    openPlaceDetail(initialPlaceId, true);
+  }
+
   trackEvent("page_view", {
     campus: state.campus,
-    map: "kagong",
-    initial_view: state.viewMode,
+    mood: state.selectedMood || "none",
   });
-  initA2HSTrigger();
+
+  // 3-2절: 상태는 1분마다 다시 계산 (페이지를 켜둔 채 시간이 지나도 정확히 반영)
+  if (refreshTimerId) clearInterval(refreshTimerId);
+  refreshTimerId = setInterval(() => {
+    renderAll(false);
+  }, 60000);
 }
 
 document.addEventListener("DOMContentLoaded", initApp);

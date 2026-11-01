@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>경희대 카공맵 — 영업시간 엔진(hours.js) 테스트</title>
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #FAFAF7;
+      color: #111111;
+      padding: 28px 16px;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #6B6B6B;
+      margin-bottom: 20px;
+    }
+    .summary-banner {
+      background: #FFFFFF;
+      border: 1px solid #ECECEC;
+      border-radius: 16px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .test-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .test-card {
+      background: #FFFFFF;
+      border: 1px solid #ECECEC;
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .test-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .test-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .badge.pass {
+      background: #F3F4F6;
+      color: #111111;
+    }
+    .badge.fail {
+      background: #FEF2F2;
+      color: #D97706;
+    }
+    .test-detail {
+      font-size: 13px;
+      color: #6B6B6B;
+    }
+    .test-detail code {
+      background: #FAFAF7;
+      border: 1px solid #ECECEC;
+      padding: 2px 6px;
+      border-radius: 6px;
+      color: #111111;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>경희대 카공맵 영업시간 테스트 (hours.js)</h1>
+    <p class="subtitle">작업 지시서 3-4절 필수 검증 케이스 및 확장 규칙 자동 검증</p>
+    <div class="summary-banner" id="testSummary">검증 실행 중...</div>
+    <div class="test-list" id="testList"></div>
+  </div>
+
+  <script src="./hours.js"></script>
+  <script>
+    (function runTests() {
+      const results = [];
+
+      function assertCase(title, expected, actual, note) {
+        const passed = expected === actual;
+        results.push({ title, expected, actual, passed, note });
+      }
+
+      // 1. 화요일 23:30 → 할리스 경희대점(08:00~24:00)은 "곧 마감 · 30분 남음"
+      const hollys = {
+        name: "할리스 경희대점",
+        days: "매일",
+        hours: "08:00 ~ 24:00",
+        status: "운영"
+      };
+      // 2026-11-03은 화요일
+      const tue2330 = new Date("2026-11-03T23:30:00+09:00");
+      const res1 = HoursEngine.getPlaceBusinessStatus(hollys, tue2330);
+      assertCase(
+        "케이스 1: 화요일 23:30 → 할리스 경희대점(08:00~24:00)",
+        "곧 마감 · 30분 남음",
+        res1.label,
+        "마감까지 60분 이하일 때 곧 마감 및 남은 분 표시"
+      );
+
+      // 2. 일요일 14:00 → 카페 회기동(월~토, 일 휴무, 11:00~22:00)은 "오늘 휴무 · 월 11:00 오픈"
+      const cafeHoegi = {
+        name: "카페 회기동",
+        days: "월~토 (일 휴무)",
+        hours: "11:00 ~ 22:00",
+        closed_days: "일",
+        status: "운영"
+      };
+      // 2026-11-01은 일요일
+      const sun1400 = new Date("2026-11-01T14:00:00+09:00");
+      const res2 = HoursEngine.getPlaceBusinessStatus(cafeHoegi, sun1400);
+      assertCase(
+        "케이스 2: 일요일 14:00 → 카페 회기동(월~토, 일 휴무)",
+        "오늘 휴무 · 월 11:00 오픈",
+        res2.label,
+        "정기휴무일 및 다음 영업 요일·오픈 시각 계산"
+      );
+
+      // 3-A. 수요일 03:00 → 24시간 매장은 "24시간 영업"
+      const store24h = {
+        name: "투썸플레이스 한국외대점",
+        days: "매일 (연중무휴)",
+        hours: "24시간 영업",
+        status: "운영"
+      };
+      const wed0300 = new Date("2026-11-04T03:00:00+09:00");
+      const res3a = HoursEngine.getPlaceBusinessStatus(store24h, wed0300);
+      assertCase(
+        "케이스 3-A: 수요일 03:00 → 24시간 매장",
+        "24시간 영업",
+        res3a.label,
+        "새벽 시간대 24시간 영업 유지"
+      );
+
+      // 3-B. 수요일 03:00 → 08:00 오픈 매장은 "영업 종료 · 08:00 오픈"
+      const store0800 = {
+        name: "투썸플레이스 경희대점",
+        days: "매일",
+        hours: "08:00 ~ 23:00",
+        status: "운영"
+      };
+      const res3b = HoursEngine.getPlaceBusinessStatus(store0800, wed0300);
+      assertCase(
+        "케이스 3-B: 수요일 03:00 → 08:00 오픈 매장",
+        "영업 종료 · 08:00 오픈",
+        res3b.label,
+        "당일 오픈 전 새벽 시각 조회 시 당일 오픈 시각 안내"
+      );
+
+      // 4. status=폐업인 행은 어디에도 나오지 않음
+      const sampleList = [
+        { id: 1, name: "정상 매장", status: "운영", days: "매일", hours: "09:00 ~ 22:00" },
+        { id: 2, name: "폐업 매장", status: "폐업", days: "매일", hours: "09:00 ~ 22:00" },
+        { id: 3, name: "임시휴업 매장", status: "임시휴업", days: "매일", hours: "09:00 ~ 22:00" }
+      ];
+      const activeList = HoursEngine.filterActivePlaces(sampleList);
+      const closedStatus = HoursEngine.getPlaceBusinessStatus(sampleList[1], tue2330);
+      assertCase(
+        "케이스 4: status=폐업인 행은 지도·목록에서 완전히 제외",
+        "true / 남는 개수 2",
+        `${closedStatus.hidden && !activeList.some(p => p.id === 2)} / 남는 개수 ${activeList.length}`,
+        "filterActivePlaces() 및 hidden 플래그 검증"
+      );
+
+      // 5. 시간 선택을 오늘 밤 10시(22:00)로 바꾸면 22시 이전 마감 매장이 "영업 종료"로 바뀜
+      const storeClose2130 = {
+        name: "컴플리트커피",
+        days: "매일",
+        hours: "11:00 ~ 21:30",
+        status: "운영"
+      };
+      const storeClose2200 = {
+        name: "스타벅스 경희대삼거리점",
+        days: "매일",
+        hours: "07:00 ~ 22:00",
+        status: "운영"
+      };
+      const tonight2200 = HoursEngine.createSeoulDateAtTime(22, 0, new Date("2026-11-03T15:00:00+09:00"));
+      const res5a = HoursEngine.getPlaceBusinessStatus(storeClose2130, tonight2200);
+      const res5b = HoursEngine.getPlaceBusinessStatus(storeClose2200, tonight2200);
+      assertCase(
+        "케이스 5: 시간 선택을 오늘 밤 10시(22:00)로 변경 시 21:30·22:00 마감 매장 상태",
+        "closed / 영업 종료 · 내일 11:00 오픈 / 영업 종료 · 내일 07:00 오픈",
+        `${res5a.state} / ${res5a.label} / ${res5b.label}`,
+        "밤샘 계획용 시각 시뮬레이션 검증"
+      );
+
+      // 6. 추가 검증: 자정을 넘는 영업 (10:00 ~ 02:00) -> 화요일 01:00에 월요일 영업분 적용
+      const storeOvernight = {
+        name: "심야 카공 카페",
+        days: "월~토 (일 휴무)",
+        hours: "10:00 ~ 02:00",
+        status: "운영"
+      };
+      const tue0100 = new Date("2026-11-03T01:00:00+09:00");
+      const res6 = HoursEngine.getPlaceBusinessStatus(storeOvernight, tue0100);
+      assertCase(
+        "추가 검증 A: 자정 넘김 영업(10:00~02:00) 화요일 01:00 조회",
+        "곧 마감 · 60분 남음",
+        res6.label,
+        "화요일 01:00에는 월요일 영업분이 이어져 마감 60분 전으로 계산"
+      );
+
+      // 7. 추가 검증: 브레이크타임 및 임시휴업
+      const storeBreak = {
+        name: "브레이크 테스트 카페",
+        days: "매일",
+        hours: "09:00 ~ 22:00",
+        break_time: "15:00-16:00",
+        status: "운영"
+      };
+      const tue1530 = new Date("2026-11-03T15:30:00+09:00");
+      const res7a = HoursEngine.getPlaceBusinessStatus(storeBreak, tue1530);
+      const res7b = HoursEngine.getPlaceBusinessStatus(sampleList[2], tue1530);
+      assertCase(
+        "추가 검증 B: 브레이크타임(15:00-16:00) 및 임시휴업 상태 표시",
+        "브레이크 · 16:00 재오픈 / 임시휴업",
+        `${res7a.label} / ${res7b.label}`,
+        "break_time 및 status=임시휴업 반영"
+      );
+
+      const passCount = results.filter(r => r.passed).length;
+      const summaryEl = document.getElementById("testSummary");
+      summaryEl.innerHTML = `
+        <span>전체 테스트 ${results.length}건 중 ${passCount}건 통과</span>
+        <span>${passCount === results.length ? "ALL PASSED" : "FAILED"}</span>
+      `;
+
+      const listEl = document.getElementById("testList");
+      listEl.innerHTML = results.map(r => `
+        <div class="test-card">
+          <div class="test-header">
+            <span class="test-title">${r.title}</span>
+            <span class="badge ${r.passed ? "pass" : "fail"}">${r.passed ? "PASS" : "FAIL"}</span>
+          </div>
+          <div class="test-detail">
+            <div>기대값: <code>${r.expected}</code></div>
+            <div style="margin-top:4px;">실제값: <code>${r.actual}</code></div>
+            <div style="margin-top:4px;">설명: ${r.note}</div>
+          </div>
+        </div>
+      `).join("");
+    })();
+  </script>
+</body>
+</html>
