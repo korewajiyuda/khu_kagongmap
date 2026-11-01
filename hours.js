@@ -100,6 +100,19 @@
   }
 
   /**
+   * 다가오는 특정 시각(예: 아침 9시, 낮 2시, 밤 10시)을 기준으로 서울 Date 객체를 반환한다.
+   * 새벽 2시에 "아침 9시"를 고르면 당일 오전 9시, 밤 11시에 "아침 9시"를 고르면 다음 날 오전 9시가 된다.
+   */
+  function createUpcomingSeoulDateAtTime(hour, minute, baseDate) {
+    const ref = baseDate instanceof Date ? baseDate : new Date();
+    const todayTarget = createSeoulDateAtTime(hour, minute, ref);
+    if (todayTarget.getTime() <= ref.getTime()) {
+      return new Date(todayTarget.getTime() + 24 * 60 * 60 * 1000);
+    }
+    return todayTarget;
+  }
+
+  /**
    * "HH:MM" 문자열을 분(0 ~ 1440)으로 변환한다.
    */
   function parseTimeToMinutes(str) {
@@ -766,6 +779,7 @@
   const HoursEngine = {
     getSeoulTimeParts,
     createSeoulDateAtTime,
+    createUpcomingSeoulDateAtTime,
     parseTimeToMinutes,
     formatMinutesToHHMM,
     parseTimeRangeString,

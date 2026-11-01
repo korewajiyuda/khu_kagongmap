@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://korewajiyuda.github.io/khu_kagongmap/assets/fairy/og-image.png" />
 
   <!-- 파비콘 (요정 얼굴 아이콘) -->
-  <link rel="icon" type="image/webp" href="./assets/fairy/fairy-head-pin.webp?v=20261102_2" />
+  <link rel="icon" type="image/webp" href="./assets/fairy/fairy-head-pin.webp?v=20261102_3" />
 
   <!-- Pretendard Dynamic Subset Webfont -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
@@ -33,20 +33,20 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
   <!-- App Stylesheet -->
-  <link rel="stylesheet" href="./style.css?v=20261102_2" />
+  <link rel="stylesheet" href="./style.css?v=20261102_3" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
-    <!-- 5-1. 상단 헤더 1줄 (왼쪽: 큼직한 요정 + 경희대 카공맵 / 오른쪽: 캠퍼스 세그먼트 + 메뉴 버튼) -->
+    <!-- 5-1. 상단 헤더 1줄 (왼쪽: 큼직한 3D 요정 + 경희대 카공맵 / 오른쪽: 캠퍼스 세그먼트 + 메뉴 버튼) -->
     <header class="top-header" role="banner">
       <div class="brand-group" id="brandFairyTrigger" role="button" tabindex="0" aria-label="요정 마스코트 인사 보기">
         <img
-          src="./assets/fairy/fairy-wave.webp?v=20261102_2"
+          src="./assets/fairy/fairy-wave.webp?v=20261102_3"
           alt="경희대 카공맵 요정 마스코트"
           class="brand-fairy-icon fairy-float"
           id="headerFairyImg"
-          width="38"
-          height="38"
+          width="44"
+          height="44"
         />
         <h1 class="brand-title">경희대 카공맵</h1>
       </div>
@@ -129,7 +129,7 @@
 
       <!-- 로딩 오버레이 (fairy-fly.webp + "자리 알아보는 중…") -->
       <div class="map-loading-pill hidden" id="loadingIndicator" role="status" aria-live="polite">
-        <img src="./assets/fairy/fairy-fly.webp?v=20261102_2" alt="" class="loading-fairy fairy-float" width="40" height="40" />
+        <img src="./assets/fairy/fairy-fly.webp?v=20261102_3" alt="" class="loading-fairy fairy-float" width="46" height="42" />
         <span id="loadingText">자리 알아보는 중…</span>
       </div>
 
@@ -175,7 +175,7 @@
 
       <!-- 시트 내부 뷰 1: 목록 및 상황 탐색 뷰 -->
       <div class="sheet-list-view" id="sheetListView">
-        <!-- 첫 진입 요정 삼총사 인사 바 (요정을 누르면 통통 튀며 응원 메시지가 바뀌는 인터랙티브 요소) -->
+        <!-- 첫 진입 3D 팝아웃 요정 삼총사 인사 바 + 내일 아침/오후/밤 1탭 빠른 시간 선택 -->
         <div class="fairy-greeting-bar" id="fairyGreetingBar">
           <button
             type="button"
@@ -184,17 +184,25 @@
             aria-label="요정 삼총사 눌러서 응원 메시지 보기"
           >
             <img
-              src="./assets/fairy/fairy-trio.webp?v=20261102_2"
+              src="./assets/fairy/fairy-trio.webp?v=20261102_3"
               alt="요정 삼총사"
               class="greeting-fairy-img fairy-float"
               id="greetingFairyImg"
-              width="62"
-              height="48"
+              width="86"
+              height="62"
             />
           </button>
-          <div class="greeting-text-wrap" id="greetingTextTrigger" role="button" tabindex="0" aria-label="다른 응원 문구 보기">
-            <p class="greeting-text" id="greetingText">오늘은 어디서 공부할까요?</p>
-            <span class="greeting-sub-hint">요정을 톡 눌러보세요</span>
+          <div class="greeting-content-col">
+            <div class="greeting-text-wrap" id="greetingTextTrigger" role="button" tabindex="0" aria-label="다른 응원 문구 보기">
+              <p class="greeting-text" id="greetingText">새벽이네요! 내일 아침 갈 카페를 미리 찾아볼까요?</p>
+            </div>
+            <div class="fairy-quick-time-row" id="fairyQuickTimeRow" role="group" aria-label="방문 시간대 빠른 선택">
+              <button type="button" class="fairy-time-pill is-active" data-quick-time="now">지금</button>
+              <button type="button" class="fairy-time-pill" data-quick-time="morning09">내일 아침 9시</button>
+              <button type="button" class="fairy-time-pill" data-quick-time="afternoon14">낮 2시</button>
+              <button type="button" class="fairy-time-pill" data-quick-time="tonight22">밤 10시</button>
+              <button type="button" class="fairy-time-pill" data-quick-time="all_places">닫은 곳도 보기</button>
+            </div>
           </div>
           <button type="button" class="greeting-dismiss-btn" id="btnDismissGreeting" aria-label="인사말 닫기">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -270,6 +278,8 @@
               </svg>
               <select id="selectVisitTime" class="clean-select" aria-label="방문 예정 시각 선택">
                 <option value="now" selected>지금</option>
+                <option value="morning09">아침 9시</option>
+                <option value="afternoon14">낮 2시</option>
                 <option value="tonight22">오늘 밤 10시</option>
                 <option value="custom">직접 선택</option>
               </select>
@@ -489,7 +499,7 @@
 
   <!-- Leaflet 1.9.4 & Hours Engine & App Logic -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="./hours.js?v=20261102_2"></script>
-  <script src="./app.js?v=20261102_2"></script>
+  <script src="./hours.js?v=20261102_3"></script>
+  <script src="./app.js?v=20261102_3"></script>
 </body>
 </html>

@@ -206,7 +206,7 @@ function cycleFairyCheerMessage(sourceEl) {
   if (greetingBar) greetingBar.classList.remove("hidden");
   if (greetingText) greetingText.textContent = nextMsg;
   if (greetingImg) {
-    greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_2";
+    greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_3";
   }
 
   triggerFairySparkleAndHop(sourceEl || greetingImg);
@@ -274,9 +274,19 @@ function formatDistanceLabel(meters) {
   return `${meters}m`;
 }
 
-// 8. 현재 선택된 방문 시각("지금" / "오늘 밤 10시" / "직접 선택")에 따른 기준 Date 반환
+// 8. 현재 선택된 방문 시각("지금" / "아침 9시" / "낮 2시" / "오늘 밤 10시" / "직접 선택")에 따른 기준 Date 반환
 function getEffectiveReferenceDate() {
   const now = new Date();
+  if (state.visitTimeMode === "morning09") {
+    return window.HoursEngine.createUpcomingSeoulDateAtTime
+      ? window.HoursEngine.createUpcomingSeoulDateAtTime(9, 0, now)
+      : window.HoursEngine.createSeoulDateAtTime(9, 0, now);
+  }
+  if (state.visitTimeMode === "afternoon14") {
+    return window.HoursEngine.createUpcomingSeoulDateAtTime
+      ? window.HoursEngine.createUpcomingSeoulDateAtTime(14, 0, now)
+      : window.HoursEngine.createSeoulDateAtTime(14, 0, now);
+  }
   if (state.visitTimeMode === "tonight22") {
     return window.HoursEngine.createSeoulDateAtTime(22, 0, now);
   }
@@ -869,6 +879,12 @@ function renderControlsAndGreeting(displayedPlaces, refDate) {
     selectRadius.value = String(state.radiusMeters);
   }
 
+  // 방문 예정 시각 드롭다운 동기화
+  const selectVisitTime = document.getElementById("selectVisitTime");
+  if (selectVisitTime) {
+    selectVisitTime.value = state.visitTimeMode;
+  }
+
   // 영업 중만 스위치 동기화
   const btnOpenNow = document.getElementById("btnToggleOpenNow");
   if (btnOpenNow) {
@@ -876,14 +892,22 @@ function renderControlsAndGreeting(displayedPlaces, refDate) {
     btnOpenNow.setAttribute("aria-checked", state.openNowOnly ? "true" : "false");
   }
 
-  // 결과 요약 (예: "영업 중 8곳")
+  // 결과 요약 (예: "영업 중 8곳" 또는 "아침 9시 영업 18곳")
   const summaryEl = document.getElementById("resultCountSummary");
   if (summaryEl) {
     const openCount = displayedPlaces.filter((p) => p.businessStatus.isOpen).length;
-    summaryEl.textContent = `영업 중 ${openCount}곳`;
+    if (state.visitTimeMode === "morning09") {
+      summaryEl.textContent = `아침 9시 영업 ${openCount}곳`;
+    } else if (state.visitTimeMode === "afternoon14") {
+      summaryEl.textContent = `낮 2시 영업 ${openCount}곳`;
+    } else if (state.visitTimeMode === "tonight22") {
+      summaryEl.textContent = `밤 10시 영업 ${openCount}곳`;
+    } else {
+      summaryEl.textContent = `영업 중 ${openCount}곳`;
+    }
   }
 
-  // 7-3절: 새벽 시간대에도 항상 요정 삼총사(fairy-trio.webp)가 큼직하고 선명하게 등장
+  // 7-3절: 새벽 시간대에도 항상 요정 삼총사(fairy-trio.webp)가 큼직하고 입체적으로 등장 + 시간대 빠른 선택 동기화
   const greetingBar = document.getElementById("fairyGreetingBar");
   const greetingImg = document.getElementById("greetingFairyImg");
   const greetingText = document.getElementById("greetingText");
@@ -892,11 +916,39 @@ function renderControlsAndGreeting(displayedPlaces, refDate) {
       greetingBar.classList.add("hidden");
     } else {
       greetingBar.classList.remove("hidden");
-      greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_2";
-      if (!greetingText.textContent) {
-        greetingText.textContent = FAIRY_CHEER_MESSAGES[state.fairyCheerIndex];
+      greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_3";
+      const realSeoulNow = window.HoursEngine.getSeoulTimeParts(new Date());
+      if (!state._customGreetingLocked) {
+        if (realSeoulNow.hour >= 0 && realSeoulNow.hour < 7 && state.visitTimeMode === "now") {
+          greetingText.textContent =
+            "새벽이네요! 내일 아침 갈 카페를 미리 찾아볼까요?";
+        } else if (state.visitTimeMode === "morning09") {
+          greetingText.textContent =
+            "아침 9시에 활짝 열려 있는 카페들을 모았어요!";
+        } else if (state.visitTimeMode === "afternoon14") {
+          greetingText.textContent =
+            "오후 2시에 여유롭게 공부하기 좋은 곳들이에요!";
+        } else if (state.visitTimeMode === "tonight22") {
+          greetingText.textContent =
+            "밤 10시에도 열려 있는 야간 카공 카페들이에요!";
+        } else {
+          greetingText.textContent = FAIRY_CHEER_MESSAGES[state.fairyCheerIndex];
+        }
       }
     }
+  }
+
+  // 요정 인사 바 안의 빠른 시간대 알약 활성화 상태 동기화
+  const quickTimeRow = document.getElementById("fairyQuickTimeRow");
+  if (quickTimeRow) {
+    quickTimeRow.querySelectorAll("[data-quick-time]").forEach((btn) => {
+      const mode = btn.dataset.quickTime;
+      const isActive =
+        mode === "all_places"
+          ? !state.openNowOnly
+          : state.openNowOnly && state.visitTimeMode === mode;
+      btn.classList.toggle("is-active", isActive);
+    });
   }
 
   // Google AI Pro 링크 캠퍼스 UTM 업데이트
@@ -919,17 +971,22 @@ function renderPlaceList(displayedPlaces) {
     container.innerHTML = `
       <div class="empty-state-box">
         <img
-          src="./assets/fairy/fairy-sleep.webp?v=20261102_2"
+          src="./assets/fairy/fairy-sleep.webp?v=20261102_3"
           alt="별을 베고 졸고 있는 요정"
           class="empty-fairy-img fairy-float"
           id="emptySleepFairyImg"
-          width="108"
-          height="108"
+          width="136"
+          height="106"
           loading="lazy"
         />
         <p class="empty-state-title">${reasonText}</p>
         <p class="empty-state-sub">${state.anchorCoord.label} 기준 조건에 맞는 카페가 없어요.</p>
         <div class="empty-action-row">
+          ${
+            state.visitTimeMode !== "morning09"
+              ? `<button type="button" class="secondary-pill-btn" id="btnEmptyMorning09" aria-label="내일 아침 9시 영업 카페 보기">내일 아침 9시 카페 보기</button>`
+              : ""
+          }
           ${
             state.radiusMeters !== 0
               ? `<button type="button" class="secondary-pill-btn" id="btnEmptyExpandRadius" aria-label="탐색 반경 전체로 넓히기">반경 넓히기</button>`
@@ -954,6 +1011,16 @@ function renderPlaceList(displayedPlaces) {
       emptyFairyImg.addEventListener("click", () => {
         triggerFairySparkleAndHop(emptyFairyImg);
         showToast("요정이 깨어났어요! 반경을 넓히거나 닫은 곳도 함께 볼까요?");
+      });
+    }
+    const btnEmptyMorning09 = document.getElementById("btnEmptyMorning09");
+    if (btnEmptyMorning09) {
+      btnEmptyMorning09.addEventListener("click", () => {
+        state.visitTimeMode = "morning09";
+        state.openNowOnly = true;
+        state._customGreetingLocked = false;
+        trackEvent("change_visit_time", { mode: "morning09", source: "empty_state" });
+        renderAll(false);
       });
     }
     const btnExpand = document.getElementById("btnEmptyExpandRadius");
@@ -1363,18 +1430,18 @@ function renderMapView(displayedPlaces) {
     }).addTo(leafletMap);
   }
 
-  // 기준점 마커: 큼직한 요정 얼굴 핀 (fairy-head-pin.webp, 56x56) + 클릭 인터랙션
+  // 기준점 마커: 큼직한 3D 요정 얼굴 핀 (fairy-head-pin.webp, 64x64) + 클릭 인터랙션
   const anchorIcon = L.divIcon({
     className: "fairy-anchor-marker",
     html: `
       <div class="fairy-anchor-ring fairy-float" id="mapFairyAnchorRing" title="${state.anchorCoord.label} 기준점 (눌러서 중심 맞추기)">
         <div class="fairy-anchor-inner">
-          <img src="./assets/fairy/fairy-head-pin.webp?v=20261102_2" alt="${state.anchorCoord.label} 기준점" width="48" height="48" />
+          <img src="./assets/fairy/fairy-head-pin.webp?v=20261102_3" alt="${state.anchorCoord.label} 기준점" width="55" height="55" />
         </div>
       </div>
     `,
-    iconSize: [56, 56],
-    iconAnchor: [28, 28],
+    iconSize: [64, 64],
+    iconAnchor: [32, 32],
   });
 
   anchorMarker = L.marker([state.anchorCoord.lat, state.anchorCoord.lng], {
@@ -1824,6 +1891,7 @@ function bindEvents() {
   const btnFairyCheer = document.getElementById("btnFairyCheer");
   const greetingTextTrigger = document.getElementById("greetingTextTrigger");
   const onGreetingFairyClick = () => {
+    state._customGreetingLocked = true;
     const greetingImg = document.getElementById("greetingFairyImg");
     cycleFairyCheerMessage(greetingImg);
   };
@@ -1832,6 +1900,50 @@ function bindEvents() {
   }
   if (greetingTextTrigger) {
     greetingTextTrigger.addEventListener("click", onGreetingFairyClick);
+  }
+
+  // 요정 인사 바 안의 1탭 빠른 시간대 선택 알약 (지금 / 내일 아침 9시 / 낮 2시 / 밤 10시 / 닫은 곳도 보기)
+  const quickTimeRow = document.getElementById("fairyQuickTimeRow");
+  if (quickTimeRow) {
+    quickTimeRow.addEventListener("click", (e) => {
+      const pill = e.target.closest("[data-quick-time]");
+      if (!pill) return;
+      const mode = pill.dataset.quickTime;
+      const greetingImg = document.getElementById("greetingFairyImg");
+      triggerFairySparkleAndHop(greetingImg);
+      state._customGreetingLocked = false;
+
+      if (mode === "all_places") {
+        state.openNowOnly = !state.openNowOnly;
+        trackEvent("toggle_open_now", {
+          open_now_only: state.openNowOnly,
+          source: "fairy_quick_pill",
+        });
+        showToast(
+          state.openNowOnly
+            ? "영업 중인 카페만 모아서 보여드려요."
+            : "영업 종료된 카페도 모두 함께 보여드려요!"
+        );
+      } else {
+        state.visitTimeMode = mode;
+        state.openNowOnly = true;
+        const customTimeInput = document.getElementById("customTimeInput");
+        if (customTimeInput) customTimeInput.classList.add("hidden");
+        trackEvent("change_visit_time", {
+          mode,
+          source: "fairy_quick_pill",
+        });
+        const labelMap = {
+          now: "지금 열려 있는 카페 기준으로 보여드려요!",
+          morning09: "내일 아침 9시에 문 여는 카페들을 찾았어요!",
+          afternoon14: "낮 2시에 영업 중인 카페들을 찾았어요!",
+          tonight22: "밤 10시에도 열려 있는 카페들을 찾았어요!",
+        };
+        if (labelMap[mode]) showToast(labelMap[mode]);
+      }
+
+      renderAll(false);
+    });
   }
 
   // 4-1절: 상황 카드 클릭 (한 번에 하나만 선택, 다시 누르면 해제, 0곳 카드는 안내만 표시)
