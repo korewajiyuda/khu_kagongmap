@@ -144,7 +144,74 @@ const state = {
   selectedPlaceId: null,
   sheetState: "half", // 'peek' | 'half' | 'full'
   greetingDismissed: false,
+  fairyCheerIndex: 0,
 };
+
+const FAIRY_CHEER_MESSAGES = [
+  "오늘은 어디서 공부할까요?",
+  "과제 폭탄도 요정 삼총사가 같이 응원할게요!",
+  "배터리 걱정 없는 콘센트 명당부터 찾아볼까요?",
+  "오늘 목표 분량 끝내면 맛있는 디저트 어때요?",
+  "밤늦게까지 집중하는 경희인, 오늘도 파이팅이에요!",
+  "공강 시간엔 정문·후문 300m 안쪽 카페가 딱이에요!",
+];
+
+function triggerFairySparkleAndHop(targetEl) {
+  if (!targetEl) return;
+  targetEl.classList.remove("fairy-hop");
+  void targetEl.offsetWidth;
+  targetEl.classList.add("fairy-hop");
+  setTimeout(() => {
+    targetEl.classList.remove("fairy-hop");
+  }, 540);
+
+  const rect = targetEl.getBoundingClientRect();
+  if (!rect || rect.width === 0) return;
+
+  const offsets = [-16, 0, 16];
+  offsets.forEach((dx, idx) => {
+    const sp = document.createElement("div");
+    sp.className = "fairy-sparkle-particle";
+    sp.style.left = `${rect.left + rect.width / 2 + dx * 0.5}px`;
+    sp.style.top = `${rect.top + rect.height * 0.25}px`;
+    sp.style.setProperty("--dx", `${dx}px`);
+    sp.style.animationDelay = `${idx * 55}ms`;
+    sp.innerHTML = `
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <defs>
+          <linearGradient id="spGrad${Date.now()}_${idx}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#F26B5E" />
+            <stop offset="33%" stop-color="#F6C453" />
+            <stop offset="67%" stop-color="#4D96FF" />
+            <stop offset="100%" stop-color="#6BCB77" />
+          </linearGradient>
+        </defs>
+        <path fill="url(#spGrad${Date.now()}_${idx})" d="M8 0L9.8 6.2L16 8L9.8 9.8L8 16L6.2 9.8L0 8L6.2 6.2Z" />
+      </svg>
+    `;
+    document.body.appendChild(sp);
+    setTimeout(() => sp.remove(), 820);
+  });
+}
+
+function cycleFairyCheerMessage(sourceEl) {
+  state.greetingDismissed = false;
+  state.fairyCheerIndex = (state.fairyCheerIndex + 1) % FAIRY_CHEER_MESSAGES.length;
+  const nextMsg = FAIRY_CHEER_MESSAGES[state.fairyCheerIndex];
+
+  const greetingBar = document.getElementById("fairyGreetingBar");
+  const greetingImg = document.getElementById("greetingFairyImg");
+  const greetingText = document.getElementById("greetingText");
+
+  if (greetingBar) greetingBar.classList.remove("hidden");
+  if (greetingText) greetingText.textContent = nextMsg;
+  if (greetingImg) {
+    greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_2";
+  }
+
+  triggerFairySparkleAndHop(sourceEl || greetingImg);
+  return nextMsg;
+}
 
 let leafletMap = null;
 let radiusCircle = null;
@@ -816,7 +883,7 @@ function renderControlsAndGreeting(displayedPlaces, refDate) {
     summaryEl.textContent = `영업 중 ${openCount}곳`;
   }
 
-  // 7-3절: 밤 1시~5시 사이에는 잠자는 요정 + 심야 응원 문구, 평소에는 삼총사 인사
+  // 7-3절: 새벽 시간대에도 항상 요정 삼총사(fairy-trio.webp)가 큼직하고 선명하게 등장
   const greetingBar = document.getElementById("fairyGreetingBar");
   const greetingImg = document.getElementById("greetingFairyImg");
   const greetingText = document.getElementById("greetingText");
@@ -825,14 +892,9 @@ function renderControlsAndGreeting(displayedPlaces, refDate) {
       greetingBar.classList.add("hidden");
     } else {
       greetingBar.classList.remove("hidden");
-      const seoulParts = window.HoursEngine.getSeoulTimeParts(refDate);
-      if (seoulParts.hour >= 1 && seoulParts.hour < 5) {
-        greetingImg.src = "./assets/fairy/fairy-sleep.webp";
-        greetingText.textContent =
-          "오늘도 고생 많아요. 열려 있는 곳만 모아뒀어요.";
-      } else {
-        greetingImg.src = "./assets/fairy/fairy-trio.webp";
-        greetingText.textContent = "오늘은 어디서 공부할까요?";
+      greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_2";
+      if (!greetingText.textContent) {
+        greetingText.textContent = FAIRY_CHEER_MESSAGES[state.fairyCheerIndex];
       }
     }
   }
@@ -857,11 +919,12 @@ function renderPlaceList(displayedPlaces) {
     container.innerHTML = `
       <div class="empty-state-box">
         <img
-          src="./assets/fairy/fairy-sleep.webp"
+          src="./assets/fairy/fairy-sleep.webp?v=20261102_2"
           alt="별을 베고 졸고 있는 요정"
           class="empty-fairy-img fairy-float"
-          width="72"
-          height="72"
+          id="emptySleepFairyImg"
+          width="108"
+          height="108"
           loading="lazy"
         />
         <p class="empty-state-title">${reasonText}</p>
@@ -886,6 +949,13 @@ function renderPlaceList(displayedPlaces) {
       </div>
     `;
 
+    const emptyFairyImg = document.getElementById("emptySleepFairyImg");
+    if (emptyFairyImg) {
+      emptyFairyImg.addEventListener("click", () => {
+        triggerFairySparkleAndHop(emptyFairyImg);
+        showToast("요정이 깨어났어요! 반경을 넓히거나 닫은 곳도 함께 볼까요?");
+      });
+    }
     const btnExpand = document.getElementById("btnEmptyExpandRadius");
     if (btnExpand) {
       btnExpand.addEventListener("click", () => {
@@ -1293,24 +1363,37 @@ function renderMapView(displayedPlaces) {
     }).addTo(leafletMap);
   }
 
-  // 기준점 마커: 요정 얼굴 핀 (fairy-head-pin.webp)
+  // 기준점 마커: 큼직한 요정 얼굴 핀 (fairy-head-pin.webp, 56x56) + 클릭 인터랙션
   const anchorIcon = L.divIcon({
     className: "fairy-anchor-marker",
     html: `
-      <div class="fairy-anchor-ring">
+      <div class="fairy-anchor-ring fairy-float" id="mapFairyAnchorRing" title="${state.anchorCoord.label} 기준점 (눌러서 중심 맞추기)">
         <div class="fairy-anchor-inner">
-          <img src="./assets/fairy/fairy-head-pin.webp" alt="${state.anchorCoord.label} 기준점" width="30" height="30" />
+          <img src="./assets/fairy/fairy-head-pin.webp?v=20261102_2" alt="${state.anchorCoord.label} 기준점" width="48" height="48" />
         </div>
       </div>
     `,
-    iconSize: [38, 38],
-    iconAnchor: [19, 19],
+    iconSize: [56, 56],
+    iconAnchor: [28, 28],
   });
 
   anchorMarker = L.marker([state.anchorCoord.lat, state.anchorCoord.lng], {
     icon: anchorIcon,
     zIndexOffset: 900,
   }).addTo(leafletMap);
+
+  anchorMarker.on("click", (e) => {
+    L.DomEvent.stopPropagation(e);
+    const ringEl = document.getElementById("mapFairyAnchorRing");
+    triggerFairySparkleAndHop(ringEl);
+    if (leafletMap) {
+      leafletMap.panTo([state.anchorCoord.lat, state.anchorCoord.lng], {
+        animate: true,
+      });
+    }
+    const cheerMsg = cycleFairyCheerMessage(ringEl);
+    showToast(`${state.anchorCoord.label} 요정: "${cheerMsg}"`);
+  });
 
   const cupSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 1 1 0 8h-1"></path><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path></svg>`;
 
@@ -1717,7 +1800,7 @@ function bindEvents() {
     });
   }
 
-  // 요정 인사말 닫기
+  // 요정 인사말 닫기 및 요정 클릭 인터랙션 (헤더 로고 요정 + 바텀시트 삼총사 요정)
   const btnDismissGreeting = document.getElementById("btnDismissGreeting");
   if (btnDismissGreeting) {
     btnDismissGreeting.addEventListener("click", () => {
@@ -1725,6 +1808,30 @@ function bindEvents() {
       const bar = document.getElementById("fairyGreetingBar");
       if (bar) bar.classList.add("hidden");
     });
+  }
+
+  const brandFairyTrigger = document.getElementById("brandFairyTrigger");
+  const headerFairyImg = document.getElementById("headerFairyImg");
+  if (brandFairyTrigger) {
+    brandFairyTrigger.addEventListener("click", () => {
+      const msg = cycleFairyCheerMessage(headerFairyImg || brandFairyTrigger);
+      const greetingImg = document.getElementById("greetingFairyImg");
+      if (greetingImg) triggerFairySparkleAndHop(greetingImg);
+      showToast(msg);
+    });
+  }
+
+  const btnFairyCheer = document.getElementById("btnFairyCheer");
+  const greetingTextTrigger = document.getElementById("greetingTextTrigger");
+  const onGreetingFairyClick = () => {
+    const greetingImg = document.getElementById("greetingFairyImg");
+    cycleFairyCheerMessage(greetingImg);
+  };
+  if (btnFairyCheer) {
+    btnFairyCheer.addEventListener("click", onGreetingFairyClick);
+  }
+  if (greetingTextTrigger) {
+    greetingTextTrigger.addEventListener("click", onGreetingFairyClick);
   }
 
   // 4-1절: 상황 카드 클릭 (한 번에 하나만 선택, 다시 누르면 해제, 0곳 카드는 안내만 표시)

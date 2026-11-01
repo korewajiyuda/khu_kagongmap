@@ -84,22 +84,69 @@ a:focus-visible,
   display: none !important;
 }
 
-/* 7-3. 요정 캐릭터 미세 플로팅 애니메이션 (2~3px, 3초 주기) */
+/* 7-3. 요정 캐릭터 플로팅 및 클릭 시 통통 튀는 인터랙션 애니메이션 */
 @keyframes fairyFloat {
   0%, 100% {
-    transform: translateY(0);
+    transform: translateY(0) rotate(-1.5deg);
   }
   50% {
-    transform: translateY(-2.5px);
+    transform: translateY(-4px) rotate(2deg);
+  }
+}
+
+@keyframes fairyHop {
+  0% {
+    transform: scale(1) translateY(0) rotate(0deg);
+  }
+  30% {
+    transform: scale(1.22, 0.88) translateY(2px) rotate(-6deg);
+  }
+  55% {
+    transform: scale(0.92, 1.18) translateY(-10px) rotate(8deg);
+  }
+  80% {
+    transform: scale(1.06, 0.96) translateY(-2px) rotate(-3deg);
+  }
+  100% {
+    transform: scale(1) translateY(0) rotate(0deg);
+  }
+}
+
+@keyframes fairySparkleRise {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(0.5) rotate(0deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(calc(-50% + var(--dx, 10px)), -26px) scale(1.15) rotate(25deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx, 14px)), -38px) scale(0.4) rotate(45deg);
   }
 }
 
 .fairy-float {
-  animation: fairyFloat 3s ease-in-out infinite;
+  animation: fairyFloat 2.6s ease-in-out infinite;
+}
+
+.fairy-hop {
+  animation: fairyHop 520ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+.fairy-sparkle-particle {
+  position: fixed;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  z-index: 2000;
+  animation: fairySparkleRise 720ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fairy-float {
+  .fairy-float,
+  .fairy-hop {
     animation: none !important;
   }
   *,
@@ -151,15 +198,23 @@ a:focus-visible,
 .brand-group {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
+  cursor: pointer;
+  user-select: none;
 }
 
 .brand-fairy-icon {
-  width: 24px;
-  height: 24px;
+  width: 38px;
+  height: 38px;
   object-fit: contain;
   flex-shrink: 0;
+  filter: drop-shadow(0 2px 5px rgba(17, 17, 17, 0.14));
+  transition: transform var(--transition-fast);
+}
+
+.brand-group:active .brand-fairy-icon {
+  transform: scale(0.92);
 }
 
 .brand-title {
@@ -306,9 +361,10 @@ a:focus-visible,
 }
 
 .loading-fairy {
-  width: 26px;
-  height: 26px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(17, 17, 17, 0.12));
 }
 
 /* 오른쪽 아래 둥근 지도 컨트롤 버튼 (내 위치 + 확대/축소) */
@@ -358,23 +414,29 @@ a:focus-visible,
   border-bottom: 1px solid var(--border-color);
 }
 
-/* 지도 기준점 요정 얼굴 핀 (fairy-head-pin.webp) */
+/* 지도 기준점 요정 얼굴 핀 (fairy-head-pin.webp — 1.5~2배 확대 및 터치 인터랙션 지원) */
 .fairy-anchor-marker {
   display: flex;
   flex-direction: column;
   align-items: center;
-  pointer-events: none;
+  cursor: pointer;
 }
 
 .fairy-anchor-ring {
-  width: 38px;
-  height: 38px;
+  width: 56px;
+  height: 56px;
   border-radius: var(--radius-pill);
-  padding: 2px;
+  padding: 3px;
   background: var(--rainbow-grad);
+  box-shadow: 0 4px 14px rgba(17, 17, 17, 0.18);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform var(--transition-fast);
+}
+
+.fairy-anchor-ring:active {
+  transform: scale(0.92);
 }
 
 .fairy-anchor-inner {
@@ -389,8 +451,8 @@ a:focus-visible,
 }
 
 .fairy-anchor-inner img {
-  width: 30px;
-  height: 30px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
 }
 
@@ -531,31 +593,56 @@ a:focus-visible,
   min-height: 0;
 }
 
-/* 7-3. 첫 진입 시트 상단 짧은 요정 인사 */
+/* 7-3. 첫 진입 시트 상단 요정 삼총사 인사 바 (크기 2배 확대 + 클릭 인터랙션) */
 .fairy-greeting-bar {
-  margin: 0 14px 6px;
-  padding: 6px 10px;
+  margin: 0 14px 8px;
+  padding: 7px 11px;
   background-color: var(--bg-warm);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
+}
+
+.greeting-fairy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  cursor: pointer;
 }
 
 .greeting-fairy-img {
-  width: 32px;
-  height: 32px;
+  width: 62px;
+  height: 48px;
   object-fit: contain;
   flex-shrink: 0;
+  filter: drop-shadow(0 2px 5px rgba(17, 17, 17, 0.14));
+}
+
+.greeting-text-wrap {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .greeting-text {
-  flex: 1;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
+}
+
+.greeting-sub-hint {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .greeting-dismiss-btn {
@@ -969,9 +1056,11 @@ a:focus-visible,
 }
 
 .empty-fairy-img {
-  width: 72px;
-  height: 72px;
+  width: 108px;
+  height: 108px;
   object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgba(17, 17, 17, 0.14));
+  cursor: pointer;
 }
 
 .empty-state-title {
