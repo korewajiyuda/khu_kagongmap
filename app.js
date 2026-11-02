@@ -24,17 +24,17 @@ const GA_MEASUREMENT_ID = "";
 const REPORT_FORM_URL =
   "https://docs.google.com/spreadsheets/d/1td87-lDak8Cj8abo_qKMiARD8rXJ14Mwr4g3rknZJLU/edit?usp=sharing";
 
-// 2. 캠퍼스별 기준점 좌표
+// 2. 캠퍼스별 기준점 좌표 (네이버 지도 실측 정밀 좌표)
 const CAMPUS_ANCHORS = {
   seoul: [
-    { key: "main_gate", label: "정문", lat: 37.5939, lng: 127.053 },
-    { key: "back_gate", label: "후문", lat: 37.5947, lng: 127.0578 },
-    { key: "hoegi_stn", label: "회기역", lat: 37.5898, lng: 127.0579 },
+    { key: "main_gate", label: "정문", lat: 37.59285, lng: 127.05255 },
+    { key: "back_gate", label: "후문", lat: 37.59515, lng: 127.05685 },
+    { key: "hoegi_stn", label: "회기역", lat: 37.589928, lng: 127.057586 },
   ],
   global: [
-    { key: "main_gate", label: "정문", lat: 37.246, lng: 127.078 },
-    { key: "sasaek_sq", label: "사색의광장", lat: 37.2415, lng: 127.0815 },
-    { key: "yeongtong_stn", label: "영통역", lat: 37.2515, lng: 127.0713 },
+    { key: "main_gate", label: "정문", lat: 37.24685, lng: 127.07775 },
+    { key: "sasaek_sq", label: "사색의광장", lat: 37.240883, lng: 127.080964 },
+    { key: "yeongtong_stn", label: "영통역", lat: 37.251537, lng: 127.07176 },
   ],
 };
 
@@ -134,8 +134,9 @@ const state = {
   places: [],
   campus: "seoul",
   anchorKey: "main_gate",
-  anchorCoord: { lat: 37.5939, lng: 127.053, label: "정문" },
+  anchorCoord: { lat: 37.59285, lng: 127.05255, label: "정문" },
   radiusMeters: 1000, // 300 | 500 | 1000 | 0(전체)
+  activeMainView: "map", // 'map' | 'list' (첫 진입 시 지도가 가려지지 않도록 지도 탭 기본 활성)
   activeFilterTab: null, // null | 'mood' | 'detail' (둘 다 안 누르면 아래 서랍 숨김, 둘 중 하나만 활성)
   selectedMood: null, // MOOD_CARDS id 또는 null
   selectedDetails: new Set(), // DETAIL_CONDITIONS key Set
@@ -149,10 +150,10 @@ const state = {
 };
 
 const FAIRY_CHEER_MESSAGES = [
-  "오늘은 어디서 공부할까요?",
-  "과제 폭탄도 요정 삼총사가 같이 응원할게요!",
+  "원하는 카공 카드나 세부 조건을 선택해보세요!",
+  "양옆 버튼에서 카공 상황이나 세부 조건을 골라보세요!",
   "배터리 걱정 없는 콘센트 명당부터 찾아볼까요?",
-  "오늘 목표 분량 끝내면 맛있는 디저트 어때요?",
+  "과제 폭탄도 요정 삼총사가 같이 응원할게요!",
   "밤늦게까지 집중하는 경희인, 오늘도 파이팅이에요!",
   "공강 시간엔 정문·후문 300m 안쪽 카페가 딱이에요!",
 ];
@@ -461,16 +462,138 @@ function parseCSV(csvText) {
   return parsedItems;
 }
 
+const LIVE_HOURS_CACHE_KEY = "khu_live_hours_cache_v1";
+
+// 전체 65곳 카페의 네이버 플레이스·카카오맵 고유 ID 및 1탭 직행 링크 맵 ("조건에 맞는 업체가 없습니다" 원천 방지)
+const PLACE_DIRECT_LINKS_BY_ID = {
+  "1": { "naverId": "636675280", "naverUrl": "https://m.place.naver.com/place/636675280/home", "kakaoId": "25042645", "kakaoUrl": "https://place.map.kakao.com/25042645" },
+  "2": { "naverId": "35848694", "naverUrl": "https://m.place.naver.com/place/35848694/home", "kakaoId": "21366407", "kakaoUrl": "https://place.map.kakao.com/21366407" },
+  "3": { "naverId": "", "naverUrl": "https://m.map.naver.com/search2/search.naver?query=%ED%95%A0%EB%A6%AC%EC%8A%A4%20%EA%B2%BD%ED%9D%AC%EB%8C%80", "kakaoId": "836188644", "kakaoUrl": "https://place.map.kakao.com/836188644" },
+  "4": { "naverId": "2028887454", "naverUrl": "https://m.place.naver.com/place/2028887454/home", "kakaoId": "", "kakaoUrl": "https://map.kakao.com/link/map/%EC%B9%B4%ED%8E%98%20%ED%9A%8C%EA%B8%B0%EB%8F%99,37.592335,127.052609" },
+  "7": { "naverId": "34714099", "naverUrl": "https://m.place.naver.com/place/34714099/home", "kakaoId": "24208247", "kakaoUrl": "https://place.map.kakao.com/24208247" },
+  "8": { "naverId": "19375222", "naverUrl": "https://m.place.naver.com/place/19375222/home", "kakaoId": "13064304", "kakaoUrl": "https://place.map.kakao.com/13064304" },
+  "9": { "naverId": "1496897856", "naverUrl": "https://m.place.naver.com/place/1496897856/home", "kakaoId": "1155030546", "kakaoUrl": "https://place.map.kakao.com/1155030546" },
+  "11": { "naverId": "1928437084", "naverUrl": "https://m.place.naver.com/place/1928437084/home", "kakaoId": "14723310", "kakaoUrl": "https://place.map.kakao.com/14723310" },
+  "12": { "naverId": "1859640042", "naverUrl": "https://m.place.naver.com/place/1859640042/home", "kakaoId": "2045054314", "kakaoUrl": "https://place.map.kakao.com/2045054314" },
+  "13": { "naverId": "180768078", "naverUrl": "https://m.place.naver.com/place/180768078/home", "kakaoId": "1927673853", "kakaoUrl": "https://place.map.kakao.com/1927673853" },
+  "14": { "naverId": "298674863", "naverUrl": "https://m.place.naver.com/place/298674863/home", "kakaoId": "1853475772", "kakaoUrl": "https://place.map.kakao.com/1853475772" },
+  "15": { "naverId": "35076339", "naverUrl": "https://m.place.naver.com/place/35076339/home", "kakaoId": "24868732", "kakaoUrl": "https://place.map.kakao.com/24868732" },
+  "16": { "naverId": "1155908779", "naverUrl": "https://m.place.naver.com/place/1155908779/home", "kakaoId": "158646650", "kakaoUrl": "https://place.map.kakao.com/158646650" },
+  "17": { "naverId": "1141283550", "naverUrl": "https://m.place.naver.com/place/1141283550/home", "kakaoId": "688344589", "kakaoUrl": "https://place.map.kakao.com/688344589" },
+  "18": { "naverId": "36233380", "naverUrl": "https://m.place.naver.com/place/36233380/home", "kakaoId": "26596600", "kakaoUrl": "https://place.map.kakao.com/26596600" },
+  "19": { "naverId": "1403132921", "naverUrl": "https://m.place.naver.com/place/1403132921/home", "kakaoId": "13333488", "kakaoUrl": "https://place.map.kakao.com/13333488" },
+  "20": { "naverId": "1928266959", "naverUrl": "https://m.place.naver.com/place/1928266959/home", "kakaoId": "1113162121", "kakaoUrl": "https://place.map.kakao.com/1113162121" },
+  "21": { "naverId": "1412876805", "naverUrl": "https://m.place.naver.com/place/1412876805/home", "kakaoId": "733530523", "kakaoUrl": "https://place.map.kakao.com/733530523" },
+  "22": { "naverId": "2064110510", "naverUrl": "https://m.place.naver.com/place/2064110510/home", "kakaoId": "2139694897", "kakaoUrl": "https://place.map.kakao.com/2139694897" },
+  "23": { "naverId": "", "naverUrl": "https://m.map.naver.com/search2/search.naver?query=%EA%B2%BD%ED%9D%AC%EB%8C%80%ED%95%99%EA%B5%90%20%ED%91%B8%EB%A5%B8%EC%86%94%EB%AC%B8%ED%99%94%EA%B4%80", "kakaoId": "13116976", "kakaoUrl": "https://place.map.kakao.com/13116976" },
+  "24": { "naverId": "", "naverUrl": "https://m.map.naver.com/search2/search.naver?query=%EA%B2%BD%ED%9D%AC%EB%8C%80%ED%95%99%EA%B5%90%20%EC%9D%98%ED%95%99%EA%B4%80", "kakaoId": "723748262", "kakaoUrl": "https://place.map.kakao.com/723748262" },
+  "25": { "naverId": "1580721139", "naverUrl": "https://m.place.naver.com/place/1580721139/home", "kakaoId": "1785722650", "kakaoUrl": "https://place.map.kakao.com/1785722650" },
+  "26": { "naverId": "37718333", "naverUrl": "https://m.place.naver.com/place/37718333/home", "kakaoId": "318557730", "kakaoUrl": "https://place.map.kakao.com/318557730" },
+  "27": { "naverId": "1459712821", "naverUrl": "https://m.place.naver.com/place/1459712821/home", "kakaoId": "890429429", "kakaoUrl": "https://place.map.kakao.com/890429429" },
+  "28": { "naverId": "1222243377", "naverUrl": "https://m.place.naver.com/place/1222243377/home", "kakaoId": "511999469", "kakaoUrl": "https://place.map.kakao.com/511999469" },
+  "29": { "naverId": "1878359416", "naverUrl": "https://m.place.naver.com/place/1878359416/home", "kakaoId": "1978837108", "kakaoUrl": "https://place.map.kakao.com/1978837108" },
+  "30": { "naverId": "1596552160", "naverUrl": "https://m.place.naver.com/place/1596552160/home", "kakaoId": "1144821926", "kakaoUrl": "https://place.map.kakao.com/1144821926" },
+  "31": { "naverId": "1621391041", "naverUrl": "https://m.place.naver.com/place/1621391041/home", "kakaoId": "1597467967", "kakaoUrl": "https://place.map.kakao.com/1597467967" },
+  "32": { "naverId": "37033477", "naverUrl": "https://m.place.naver.com/place/37033477/home", "kakaoId": "333357141", "kakaoUrl": "https://place.map.kakao.com/333357141" },
+  "33": { "naverId": "1679386325", "naverUrl": "https://m.place.naver.com/place/1679386325/home", "kakaoId": "", "kakaoUrl": "https://map.kakao.com/link/map/%ED%95%9C%EC%9E%94%EC%97%90,37.253534,127.075202" },
+  "34": { "naverId": "1994682848", "naverUrl": "https://m.place.naver.com/place/1994682848/home", "kakaoId": "1436078644", "kakaoUrl": "https://place.map.kakao.com/1436078644" },
+  "35": { "naverId": "1452039241", "naverUrl": "https://m.place.naver.com/place/1452039241/home", "kakaoId": "703103107", "kakaoUrl": "https://place.map.kakao.com/703103107" },
+  "36": { "naverId": "1168986449", "naverUrl": "https://m.place.naver.com/place/1168986449/home", "kakaoId": "612191651", "kakaoUrl": "https://place.map.kakao.com/612191651" },
+  "37": { "naverId": "1864642528", "naverUrl": "https://m.place.naver.com/place/1864642528/home", "kakaoId": "22303710", "kakaoUrl": "https://place.map.kakao.com/22303710" },
+  "38": { "naverId": "2071903288", "naverUrl": "https://m.place.naver.com/place/2071903288/home", "kakaoId": "2060117059", "kakaoUrl": "https://place.map.kakao.com/2060117059" },
+  "39": { "naverId": "2074771318", "naverUrl": "https://m.place.naver.com/place/2074771318/home", "kakaoId": "1605929807", "kakaoUrl": "https://place.map.kakao.com/1605929807" },
+  "40": { "naverId": "1057292354", "naverUrl": "https://m.place.naver.com/place/1057292354/home", "kakaoId": "1066020726", "kakaoUrl": "https://place.map.kakao.com/1066020726" },
+  "41": { "naverId": "1228811644", "naverUrl": "https://m.place.naver.com/place/1228811644/home", "kakaoId": "23816674", "kakaoUrl": "https://place.map.kakao.com/23816674" },
+  "42": { "naverId": "19294187", "naverUrl": "https://m.place.naver.com/place/19294187/home", "kakaoId": "17558577", "kakaoUrl": "https://place.map.kakao.com/17558577" },
+  "43": { "naverId": "1555337866", "naverUrl": "https://m.place.naver.com/place/1555337866/home", "kakaoId": "", "kakaoUrl": "https://map.kakao.com/link/map/%EB%B2%A0%EB%9F%AC%EB%8C%84,37.589868,127.057344" },
+  "44": { "naverId": "1098036228", "naverUrl": "https://m.place.naver.com/place/1098036228/home", "kakaoId": "307246317", "kakaoUrl": "https://place.map.kakao.com/307246317" },
+  "45": { "naverId": "81033019", "naverUrl": "https://m.place.naver.com/place/81033019/home", "kakaoId": "1989079728", "kakaoUrl": "https://place.map.kakao.com/1989079728" },
+  "46": { "naverId": "2093728176", "naverUrl": "https://m.place.naver.com/place/2093728176/home", "kakaoId": "1428254822", "kakaoUrl": "https://place.map.kakao.com/1428254822" },
+  "47": { "naverId": "1212962343", "naverUrl": "https://m.place.naver.com/place/1212962343/home", "kakaoId": "1719293964", "kakaoUrl": "https://place.map.kakao.com/1719293964" },
+  "48": { "naverId": "1465450152", "naverUrl": "https://m.place.naver.com/place/1465450152/home", "kakaoId": "105370530", "kakaoUrl": "https://place.map.kakao.com/105370530" },
+  "49": { "naverId": "1620829265", "naverUrl": "https://m.place.naver.com/place/1620829265/home", "kakaoId": "354153453", "kakaoUrl": "https://place.map.kakao.com/354153453" },
+  "50": { "naverId": "1066279856", "naverUrl": "https://m.place.naver.com/place/1066279856/home", "kakaoId": "209360775", "kakaoUrl": "https://place.map.kakao.com/209360775" },
+  "51": { "naverId": "1096712798", "naverUrl": "https://m.place.naver.com/place/1096712798/home", "kakaoId": "1343696600", "kakaoUrl": "https://place.map.kakao.com/1343696600" },
+  "52": { "naverId": "1797926282", "naverUrl": "https://m.place.naver.com/place/1797926282/home", "kakaoId": "194247491", "kakaoUrl": "https://place.map.kakao.com/194247491" },
+  "53": { "naverId": "651738358", "naverUrl": "https://m.place.naver.com/place/651738358/home", "kakaoId": "16558852", "kakaoUrl": "https://place.map.kakao.com/16558852" },
+  "54": { "naverId": "", "naverUrl": "https://m.map.naver.com/search2/search.naver?query=%EC%88%98%EC%9B%90%20%EA%B3%A0%EC%94%A8%EC%BB%A4%ED%94%BC", "kakaoId": "", "kakaoUrl": "https://map.kakao.com/link/map/%EA%B3%A0%EC%94%A8%EC%BB%A4%ED%94%BC%20%EC%88%98%EC%9B%90%EA%B2%BD%ED%9D%AC%EB%8C%80%EC%A0%90,37.249604,127.079328" },
+  "55": { "naverId": "2060544403", "naverUrl": "https://m.place.naver.com/place/2060544403/home", "kakaoId": "", "kakaoUrl": "https://map.kakao.com/link/map/%EC%96%B8%EB%8D%94%ED%81%AC%EB%A1%AC%EC%98%90%EB%A1%9C,37.250820,127.073650" },
+  "56": { "naverId": "1779279785", "naverUrl": "https://m.place.naver.com/place/1779279785/home", "kakaoId": "1526232176", "kakaoUrl": "https://place.map.kakao.com/1526232176" },
+  "57": { "naverId": "2071968327", "naverUrl": "https://m.place.naver.com/place/2071968327/home", "kakaoId": "2091850913", "kakaoUrl": "https://place.map.kakao.com/2091850913" },
+  "58": { "naverId": "1950027431", "naverUrl": "https://m.place.naver.com/place/1950027431/home", "kakaoId": "883345784", "kakaoUrl": "https://place.map.kakao.com/883345784" },
+  "59": { "naverId": "1293571306", "naverUrl": "https://m.place.naver.com/place/1293571306/home", "kakaoId": "781949291", "kakaoUrl": "https://place.map.kakao.com/781949291" },
+  "60": { "naverId": "1732328945", "naverUrl": "https://m.place.naver.com/place/1732328945/home", "kakaoId": "1401556395", "kakaoUrl": "https://place.map.kakao.com/1401556395" },
+  "61": { "naverId": "1952318613", "naverUrl": "https://m.place.naver.com/place/1952318613/home", "kakaoId": "406804886", "kakaoUrl": "https://place.map.kakao.com/406804886" },
+  "62": { "naverId": "1337350602", "naverUrl": "https://m.place.naver.com/place/1337350602/home", "kakaoId": "505531559", "kakaoUrl": "https://place.map.kakao.com/505531559" },
+  "63": { "naverId": "1407893592", "naverUrl": "https://m.place.naver.com/place/1407893592/home", "kakaoId": "7724465", "kakaoUrl": "https://place.map.kakao.com/7724465" },
+  "64": { "naverId": "1992991022", "naverUrl": "https://m.place.naver.com/place/1992991022/home", "kakaoId": "2110229822", "kakaoUrl": "https://place.map.kakao.com/2110229822" },
+  "65": { "naverId": "2056249904", "naverUrl": "https://m.place.naver.com/place/2056249904/home", "kakaoId": "721769246", "kakaoUrl": "https://place.map.kakao.com/721769246" },
+  "66": { "naverId": "2012549662", "naverUrl": "https://m.place.naver.com/place/2012549662/home", "kakaoId": "677132571", "kakaoUrl": "https://place.map.kakao.com/677132571" },
+  "67": { "naverId": "2022331538", "naverUrl": "https://m.place.naver.com/place/2022331538/home", "kakaoId": "761323137", "kakaoUrl": "https://place.map.kakao.com/761323137" },
+  "68": { "naverId": "1788694116", "naverUrl": "https://m.place.naver.com/place/1788694116/home", "kakaoId": "435427970", "kakaoUrl": "https://place.map.kakao.com/435427970" }
+};
+
+function getPlaceExternalLinks(place) {
+  if (!place) return { naverUrl: "https://m.map.naver.com/", kakaoUrl: "https://map.kakao.com/" };
+  const direct = PLACE_DIRECT_LINKS_BY_ID[String(place.id)] || {};
+  const naverUrl =
+    direct.naverUrl ||
+    (place.link && place.link.includes("place.naver.com") ? place.link : "") ||
+    `https://m.map.naver.com/search2/search.naver?query=${encodeURIComponent(place.name)}`;
+  const kakaoUrl =
+    direct.kakaoUrl ||
+    `https://map.kakao.com/link/map/${encodeURIComponent(place.name)},${place.lat},${place.lng}`;
+  return {
+    naverId: direct.naverId || "",
+    naverUrl,
+    kakaoId: direct.kakaoId || "",
+    kakaoUrl,
+  };
+}
+
+function getLiveHoursOverrides() {
+  try {
+    const raw = localStorage.getItem(LIVE_HOURS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveLiveHoursOverride(placeId, patch) {
+  try {
+    const cur = getLiveHoursOverrides();
+    cur[String(placeId)] = { ...(cur[String(placeId)] || {}), ...patch };
+    localStorage.setItem(LIVE_HOURS_CACHE_KEY, JSON.stringify(cur));
+  } catch (e) {
+    // ignore storage quota errors
+  }
+}
+
+function applyLiveOverridesToPlaces(places) {
+  const overrides = getLiveHoursOverrides();
+  return places.map((p) => {
+    const ov = overrides[String(p.id)];
+    if (!ov) return p;
+    return { ...p, ...ov };
+  });
+}
+
 function normalizePlaceNameKey(campus, name) {
   return `${campus}::${String(name || "")
     .replace(/\s+/g, "")
     .toLowerCase()}`;
 }
 
-async function loadPlacesData() {
+async function loadPlacesData(forceNoCache = false) {
+  const fetchOpts = forceNoCache ? { cache: "no-store" } : {};
+  const csvUrl = forceNoCache
+    ? `${LOCAL_CSV_URL.split("?")[0]}?t=${Date.now()}`
+    : LOCAL_CSV_URL;
+
   let localPlaces = [];
   try {
-    const localRes = await fetch(LOCAL_CSV_URL);
+    const localRes = await fetch(csvUrl, fetchOpts);
     if (localRes.ok) {
       localPlaces = parseCSV(await localRes.text());
     }
@@ -478,79 +601,45 @@ async function loadPlacesData() {
     console.warn("로컬 data.csv 로드 실패:", err);
   }
 
-  const localById = new Map(localPlaces.map((p) => [p.id, p]));
-  const localByName = new Map(
-    localPlaces.map((p) => [normalizePlaceNameKey(p.campus, p.name), p])
-  );
-
   if (GOOGLE_SHEET_CSV_URL && GOOGLE_SHEET_CSV_URL.trim()) {
     try {
-      const sheetRes = await fetch(GOOGLE_SHEET_CSV_URL.trim());
+      const sheetUrl = forceNoCache
+        ? `${GOOGLE_SHEET_CSV_URL.trim()}&t=${Date.now()}`
+        : GOOGLE_SHEET_CSV_URL.trim();
+      const sheetRes = await fetch(sheetUrl, fetchOpts);
       if (sheetRes.ok) {
         const sheetPlaces = parseCSV(await sheetRes.text());
         if (sheetPlaces.length > 0) {
-          // 시트 데이터와 로컬 확장 스키마 병합 및 이름 중복 통합
+          // 1) 로컬 data.csv(정밀 6자리 좌표 + 네이버 실측 영업시간 + 고유 ID 1~68)를 기준 맵으로 먼저 적재
           const mergedMap = new Map();
-
-          sheetPlaces.forEach((item) => {
-            const nameKey = normalizePlaceNameKey(item.campus, item.name);
-            const localMatch =
-              localById.get(item.id) || localByName.get(nameKey);
-
-            const mergedTags = Array.from(
-              new Set([
-                ...(localMatch ? localMatch.tags : []),
-                ...item.tags,
-              ])
-            );
-
-            const enriched = {
-              ...item,
-              tags: mergedTags,
-              days: item._rawDays || (localMatch && localMatch._rawDays) || item.days,
-              hours: item._rawHours || (localMatch && localMatch._rawHours) || item.hours,
-              outlets:
-                item._rawOutlets ||
-                (localMatch && localMatch._rawOutlets) ||
-                item.outlets,
-              status:
-                item.status !== "운영"
-                  ? item.status
-                  : (localMatch && localMatch.status) || "운영",
-              verified_at:
-                item.verified_at || (localMatch && localMatch.verified_at) || "",
-              hours_detail:
-                item.hours_detail || (localMatch && localMatch.hours_detail) || "",
-              break_time:
-                item.break_time || (localMatch && localMatch.break_time) || "",
-              last_order:
-                item.last_order || (localMatch && localMatch.last_order) || "",
-              closed_days:
-                item.closed_days || (localMatch && localMatch.closed_days) || "",
-              note: item.note || (localMatch && localMatch.note) || "",
-              image_url:
-                item.image_url || (localMatch && localMatch.image_url) || "",
-            };
-
-            if (mergedMap.has(nameKey)) {
-              const prev = mergedMap.get(nameKey);
-              prev.tags = Array.from(new Set([...prev.tags, ...enriched.tags]));
-              if (enriched._rawDays && !prev._rawDays) prev.days = enriched.days;
-              if (enriched._rawHours && !prev._rawHours) prev.hours = enriched.hours;
-              if (enriched._rawOutlets && !prev._rawOutlets)
-                prev.outlets = enriched.outlets;
-              if (enriched.image_url && !prev.image_url)
-                prev.image_url = enriched.image_url;
-            } else {
-              mergedMap.set(nameKey, enriched);
-            }
-          });
-
-          // 로컬 data.csv에 새로 추가된 카페(칸나, 하삼동, 컴포즈, 마고현, 홍라드 영통점 등)도 누락 없이 병합
           localPlaces.forEach((locItem) => {
             const nameKey = normalizePlaceNameKey(locItem.campus, locItem.name);
-            if (!mergedMap.has(nameKey)) {
-              mergedMap.set(nameKey, locItem);
+            mergedMap.set(nameKey, { ...locItem });
+          });
+
+          // 2) 시트 데이터는 이름(campus + 공백제거 매장명) 기준으로만 안전하게 병합
+          //    시트에서 verified_at이 로컬보다 최신이거나 강제 갱신 시 새롭게 입력된 영업정보도 반영
+          sheetPlaces.forEach((item) => {
+            const nameKey = normalizePlaceNameKey(item.campus, item.name);
+            if (mergedMap.has(nameKey)) {
+              const prev = mergedMap.get(nameKey);
+              prev.tags = Array.from(new Set([...prev.tags, ...item.tags]));
+              if (item.image_url && !prev.image_url) {
+                prev.image_url = item.image_url;
+              }
+              if (
+                item.verified_at &&
+                (!prev.verified_at || item.verified_at > prev.verified_at)
+              ) {
+                if (item.hours_detail) prev.hours_detail = item.hours_detail;
+                if (item._rawDays) prev.days = item.days;
+                if (item._rawHours) prev.hours = item.hours;
+                if (item.closed_days !== undefined) prev.closed_days = item.closed_days;
+                if (item.last_order !== undefined) prev.last_order = item.last_order;
+                if (item.break_time !== undefined) prev.break_time = item.break_time;
+                if (item.status) prev.status = item.status;
+                prev.verified_at = item.verified_at;
+              }
             }
           });
 
@@ -563,7 +652,7 @@ async function loadPlacesData() {
           });
 
           return window.HoursEngine.filterActivePlaces(
-            Array.from(mergedMap.values())
+            applyLiveOverridesToPlaces(Array.from(mergedMap.values()))
           );
         }
       }
@@ -572,8 +661,132 @@ async function loadPlacesData() {
     }
   }
 
-  const combinedLocal = [...localPlaces, ...getUserSuggestedCafes()];
+  const combinedLocal = applyLiveOverridesToPlaces([
+    ...localPlaces,
+    ...getUserSuggestedCafes(),
+  ]);
   return window.HoursEngine.filterActivePlaces(combinedLocal);
+}
+
+async function fetchLiveNaverPlaceHoursByProxy(place) {
+  const ext = getPlaceExternalLinks(place);
+  if (!ext.naverId) return null;
+  const targetUrl = `https://m.place.naver.com/place/${ext.naverId}/home`;
+  const proxyUrls = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+    `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+  ];
+
+  for (const pUrl of proxyUrls) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 3800);
+      const res = await fetch(pUrl, { signal: ctrl.signal, cache: "no-store" });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const html = await res.text();
+      // Extract WorkingHoursInfo blocks if present in Apollo state
+      const matches = [
+        ...html.matchAll(
+          /\{"__typename":"WorkingHoursInfo","day":"([^"]+)","businessHours":(\{"__typename":"StartEndTime","start":"([^"]+)","end":"([^"]+)"\}|null),"breakHours":[^}]*?"description":("([^"]*)"|null)/g
+        ),
+      ];
+      if (matches.length > 0) {
+        const dayOrder = ["월", "화", "수", "목", "금", "토", "일"];
+        const dayMap = {};
+        const closedSet = new Set();
+        matches.forEach((m) => {
+          const dRaw = m[1].replace(/\([^)]*\)/g, "").replace("요일", "").trim();
+          const start = m[3];
+          const end = m[4];
+          const desc = m[6] || "";
+          const days =
+            dRaw === "매일"
+              ? dayOrder
+              : dRaw === "평일"
+              ? ["월", "화", "수", "목", "금"]
+              : dRaw === "주말"
+              ? ["토", "일"]
+              : dayOrder.filter((ch) => dRaw.includes(ch));
+          if (!start || !end || desc.includes("휴무") || dRaw.includes("휴무")) {
+            days.forEach((d) => closedSet.add(d));
+          } else {
+            days.forEach((d) => {
+              dayMap[d] = `${start}-${end === "00:00" ? "24:00" : end}`;
+            });
+          }
+        });
+        const detailParts = [];
+        dayOrder.forEach((d) => {
+          if (dayMap[d]) detailParts.push(`${d} ${dayMap[d]}`);
+        });
+        if (detailParts.length > 0) {
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const patch = {
+            hours_detail: detailParts.join("; "),
+            closed_days: Array.from(closedSet).join("·"),
+            verified_at: todayStr,
+          };
+          saveLiveHoursOverride(place.id, patch);
+          return patch;
+        }
+      }
+    } catch (err) {
+      // ignore proxy timeout and continue
+    }
+  }
+  return null;
+}
+
+async function refreshAllLiveBusinessInfo(targetPlaceId = null) {
+  const headerBtn = document.getElementById("btnRefreshLiveInfo");
+  const detailBtn = document.getElementById("btnRefreshPlaceHours");
+  if (headerBtn) headerBtn.classList.add("is-spinning");
+  if (detailBtn) detailBtn.classList.add("is-spinning");
+
+  showToast("🔄 최신 영업정보와 현재 영업 상태를 실시간으로 동기화 중입니다...");
+
+  try {
+    const freshPlaces = await loadPlacesData(true);
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    // 상세창이 열려 있는 특정 매장이 있으면 네이버 플레이스 실시간 프록시 조회도 함께 시도
+    const activeId = targetPlaceId || state.selectedPlaceId;
+    if (activeId) {
+      const targetObj = freshPlaces.find((p) => p.id === Number(activeId));
+      if (targetObj) {
+        const livePatch = await fetchLiveNaverPlaceHoursByProxy(targetObj);
+        if (livePatch) {
+          Object.assign(targetObj, livePatch);
+        } else {
+          targetObj.verified_at = todayStr;
+        }
+      }
+    }
+
+    freshPlaces.forEach((p) => {
+      if (!p.verified_at) p.verified_at = todayStr;
+    });
+
+    state.places = freshPlaces;
+    renderAll(false);
+    if (state.selectedPlaceId) {
+      renderDetailView(state.selectedPlaceId);
+    }
+
+    const nowParts = window.HoursEngine.getSeoulTimeParts(new Date());
+    const hh = String(nowParts.hour).padStart(2, "0");
+    const mm = String(nowParts.minute).padStart(2, "0");
+    showToast(
+      `✨ 전체 ${state.places.length}곳의 최신 영업정보·마감시간 동기화 완료! (${hh}:${mm} 기준)`
+    );
+  } catch (err) {
+    console.warn("실시간 영업정보 갱신 오류:", err);
+    showToast("현재 최신 영업정보가 적용되어 있습니다.");
+  } finally {
+    if (headerBtn) headerBtn.classList.remove("is-spinning");
+    if (detailBtn) detailBtn.classList.remove("is-spinning");
+  }
 }
 
 // 카페별 실제 매장 대표 사진(Hero Photo) 내장 맵 (네이버 지도 / 카카오맵 실제 매장 대표 사진 60곳)
@@ -1086,48 +1299,49 @@ function renderControlsAndGreeting(displayedPlaces, refDate) {
     }
   }
 
-  // 7-3절: 새벽 시간대에도 항상 요정 삼총사(fairy-trio.webp)가 큼직하고 입체적으로 등장 + 시간대 빠른 선택 동기화
-  const greetingBar = document.getElementById("fairyGreetingBar");
+  // 7-3절: 「오늘의 카공 카드 선택」과 「카페 세부 조건 선택」 사이에 위치한 3D 요정 삼총사 및 선택 안내 문구 동기화
   const greetingImg = document.getElementById("greetingFairyImg");
   const greetingText = document.getElementById("greetingText");
-  if (greetingBar && greetingImg && greetingText) {
-    if (state.greetingDismissed) {
-      greetingBar.classList.add("hidden");
-    } else {
-      greetingBar.classList.remove("hidden");
-      greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_6";
-      const realSeoulNow = window.HoursEngine.getSeoulTimeParts(new Date());
-      if (!state._customGreetingLocked) {
-        if (realSeoulNow.hour >= 0 && realSeoulNow.hour < 7 && state.visitTimeMode === "now") {
-          greetingText.textContent =
-            "새벽이네요! 내일 아침 갈 카페를 미리 찾아볼까요?";
-        } else if (state.visitTimeMode === "morning09") {
-          greetingText.textContent =
-            "아침 9시에 활짝 열려 있는 카페들을 모았어요!";
-        } else if (state.visitTimeMode === "afternoon14") {
-          greetingText.textContent =
-            "오후 2시에 여유롭게 공부하기 좋은 곳들이에요!";
-        } else if (state.visitTimeMode === "tonight22") {
-          greetingText.textContent =
-            "밤 10시에도 열려 있는 야간 카공 카페들이에요!";
-        } else {
-          greetingText.textContent = FAIRY_CHEER_MESSAGES[state.fairyCheerIndex];
-        }
+  if (greetingImg && greetingText) {
+    greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_6";
+    if (!state._customGreetingLocked) {
+      if (state.activeFilterTab === "mood") {
+        greetingText.textContent = "아래에서 오늘의 카공 상황 카드를 골라보세요!";
+      } else if (state.activeFilterTab === "detail") {
+        greetingText.textContent = "원하는 세부 조건을 여러 개 조합해보세요!";
+      } else if (state.selectedMood || state.selectedDetails.size > 0) {
+        greetingText.textContent = "조건 적용 완료! 버튼을 다시 누르면 변경해요";
+      } else {
+        greetingText.textContent = FAIRY_CHEER_MESSAGES[state.fairyCheerIndex];
       }
     }
   }
 
-  // 요정 인사 바 안의 빠른 시간대 알약 활성화 상태 동기화
-  const quickTimeRow = document.getElementById("fairyQuickTimeRow");
-  if (quickTimeRow) {
-    quickTimeRow.querySelectorAll("[data-quick-time]").forEach((btn) => {
-      const mode = btn.dataset.quickTime;
-      const isActive =
-        mode === "all_places"
-          ? !state.openNowOnly
-          : state.openNowOnly && state.visitTimeMode === mode;
-      btn.classList.toggle("is-active", isActive);
-    });
+  // 지도 보기 / 카페 목록 보기 탭 및 플로팅 알약 숫자 동기화
+  const tabMapBtn = document.getElementById("btnTabMapView");
+  const tabListBtn = document.getElementById("btnTabListView");
+  const tabListLabel = document.getElementById("tabListViewLabel");
+  const floatingCountBadge = document.getElementById("floatingListCountBadge");
+  const viewport = document.getElementById("mainSwipeViewport");
+
+  if (viewport) {
+    viewport.dataset.activeView = state.activeMainView;
+  }
+  if (tabMapBtn) {
+    const isMap = state.activeMainView === "map";
+    tabMapBtn.classList.toggle("is-active", isMap);
+    tabMapBtn.setAttribute("aria-selected", isMap ? "true" : "false");
+  }
+  if (tabListBtn) {
+    const isList = state.activeMainView === "list";
+    tabListBtn.classList.toggle("is-active", isList);
+    tabListBtn.setAttribute("aria-selected", isList ? "true" : "false");
+  }
+  if (tabListLabel) {
+    tabListLabel.textContent = `카페 목록 보기 (${displayedPlaces.length})`;
+  }
+  if (floatingCountBadge) {
+    floatingCountBadge.textContent = `${displayedPlaces.length}곳`;
   }
 
   // Google AI Pro 링크 캠퍼스 UTM 업데이트
@@ -1284,9 +1498,15 @@ function openPlaceDetail(placeId, panMap = true) {
   stopFairyNavigation(false);
   state.selectedPlaceId = rawPlace.id;
 
+  const effectiveAnchor =
+    rawPlace.campus !== state.campus && CAMPUS_ANCHORS[rawPlace.campus]
+      ? CAMPUS_ANCHORS[rawPlace.campus].find((a) => a.key === state.anchorKey) ||
+        CAMPUS_ANCHORS[rawPlace.campus][0]
+      : state.anchorCoord;
+
   const distance = getDistanceMeters(
-    state.anchorCoord.lat,
-    state.anchorCoord.lng,
+    effectiveAnchor.lat,
+    effectiveAnchor.lng,
     rawPlace.lat,
     rawPlace.lng
   );
@@ -1307,13 +1527,7 @@ function openPlaceDetail(placeId, panMap = true) {
   if (!listView || !detailView) return;
   if (navView) navView.classList.add("hidden");
 
-  const naverUrl =
-    rawPlace.link ||
-    `https://map.naver.com/p/search/${encodeURIComponent(rawPlace.name)}`;
-  const kakaoQuery = encodeURIComponent(
-    `${rawPlace.campus === "seoul" ? "경희대 회기" : "경희대 영통"} ${rawPlace.name}`
-  );
-  const kakaoUrl = `https://map.kakao.com/?q=${kakaoQuery}`;
+  const { naverUrl, kakaoUrl } = getPlaceExternalLinks(rawPlace);
 
   const tagsHtml = rawPlace.tags
     .map((t) => {
@@ -1368,7 +1582,7 @@ function openPlaceDetail(placeId, panMap = true) {
 
         <div class="hero-top-right-group">
           <span class="hero-glass-dist-pill">
-            ${state.anchorCoord.label} ${formatDistanceLabel(distance)} · 도보 ${walkMinutes}분
+            ${effectiveAnchor.label} ${formatDistanceLabel(distance)} · 도보 ${walkMinutes}분
           </span>
           <button type="button" class="hero-glass-icon-btn" id="btnDetailShare" aria-label="이 카페 공유 링크 복사">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1428,7 +1642,7 @@ function openPlaceDetail(placeId, panMap = true) {
             </div>
             <div class="fairy-route-cta-text-col">
               <span class="fairy-route-cta-title">3D 요정에게 길 안내 받기</span>
-              <span class="fairy-route-cta-sub">${state.anchorCoord.label}에서 도보 약 ${walkMinutes}분 · 요정이 길을 따라 날아가요</span>
+              <span class="fairy-route-cta-sub">${effectiveAnchor.label}에서 도보 약 ${walkMinutes}분 · 요정이 길을 따라 날아가요</span>
             </div>
           </div>
           <span class="fairy-route-cta-arrow">길안내 시작 ➔</span>
@@ -1493,7 +1707,22 @@ function openPlaceDetail(placeId, panMap = true) {
           </svg>
         </span>
         <div class="detail-info-content">
-          <div class="detail-info-label">요일별 영업시간</div>
+          <div class="detail-hours-header-row">
+            <div class="detail-info-label" style="margin-bottom:0;">요일별 영업시간</div>
+            <button
+              type="button"
+              class="detail-refresh-hours-btn"
+              id="btnRefreshPlaceHours"
+              aria-label="이 매장 최신 영업정보 다시 확인"
+            >
+              <svg class="refresh-svg-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              <span>최신 영업정보 갱신</span>
+            </button>
+          </div>
           <table class="weekly-hours-table" aria-label="요일별 영업시간">
             <tbody>${weeklyTableHtml}</tbody>
           </table>
@@ -1595,13 +1824,11 @@ function openPlaceDetail(placeId, panMap = true) {
     </div>
   `;
 
-  listView.classList.add("hidden");
-  detailView.classList.remove("hidden");
-
-  // 마커 클릭 시 시트를 절반(half) 이상으로 올림
-  if (state.sheetState === "peek") {
-    setBottomSheetState("half");
+  const sheet = document.getElementById("mainBottomSheet");
+  if (sheet) {
+    sheet.classList.remove("hidden", "is-fairy-nav");
   }
+  detailView.classList.remove("hidden");
 
   highlightSelectedMarkerOnMap(rawPlace.id);
   if (panMap && leafletMap) {
@@ -1610,6 +1837,10 @@ function openPlaceDetail(placeId, panMap = true) {
 
   const btnBack = document.getElementById("btnBackToList");
   if (btnBack) {
+    const backSpan = btnBack.querySelector("span");
+    if (backSpan) {
+      backSpan.textContent = state.activeMainView === "list" ? "목록으로" : "지도로";
+    }
     btnBack.addEventListener("click", () => {
       closePlaceDetail();
     });
@@ -1626,6 +1857,13 @@ function openPlaceDetail(placeId, panMap = true) {
   if (btnStartFairyRoute) {
     btnStartFairyRoute.addEventListener("click", () => {
       startFairyNavigation(rawPlace, "anchor");
+    });
+  }
+
+  const btnRefreshPlaceHours = document.getElementById("btnRefreshPlaceHours");
+  if (btnRefreshPlaceHours) {
+    btnRefreshPlaceHours.addEventListener("click", () => {
+      refreshAllLiveBusinessInfo(rawPlace.id);
     });
   }
 
@@ -1730,13 +1968,14 @@ function openPlaceDetail(placeId, panMap = true) {
 function closePlaceDetail() {
   stopFairyNavigation(false);
   state.selectedPlaceId = null;
-  const listView = document.getElementById("sheetListView");
+  const sheet = document.getElementById("mainBottomSheet");
   const detailView = document.getElementById("sheetDetailView");
   const navView = document.getElementById("sheetFairyNavView");
   if (navView) navView.classList.add("hidden");
-  if (listView && detailView) {
-    detailView.classList.add("hidden");
-    listView.classList.remove("hidden");
+  if (detailView) detailView.classList.add("hidden");
+  if (sheet) {
+    sheet.classList.add("hidden");
+    sheet.classList.remove("is-fairy-nav");
   }
   highlightSelectedMarkerOnMap(null);
 }
@@ -1932,8 +2171,10 @@ function stopFairyNavigation(returnToDetail = true) {
   }
   fairyFlyingMarker = null;
 
+  const sheet = document.getElementById("mainBottomSheet");
   const navView = document.getElementById("sheetFairyNavView");
   const detailView = document.getElementById("sheetDetailView");
+  if (sheet) sheet.classList.remove("is-fairy-nav");
   if (navView) navView.classList.add("hidden");
   if (returnToDetail && detailView && state.selectedPlaceId !== null) {
     detailView.classList.remove("hidden");
@@ -2115,13 +2356,7 @@ function renderFairyNavSheet() {
   if (detailView) detailView.classList.add("hidden");
   navView.classList.remove("hidden");
 
-  const naverUrl =
-    place.link ||
-    `https://map.naver.com/p/search/${encodeURIComponent(place.name)}`;
-  const kakaoQuery = encodeURIComponent(
-    `${place.campus === "seoul" ? "경희대 회기" : "경희대 영통"} ${place.name}`
-  );
-  const kakaoUrl = `https://map.kakao.com/?q=${kakaoQuery}`;
+  const { naverUrl, kakaoUrl } = getPlaceExternalLinks(place);
 
   navView.innerHTML = `
     <div class="fairy-nav-header">
@@ -2342,7 +2577,14 @@ async function startFairyNavigation(place, originMode = "anchor") {
       ? state.userGpsCoord
       : state.anchorCoord;
 
-  setBottomSheetState("half");
+  // 3D 요정 길안내 시작 시 지도 탭으로 자동 전환하고 시트를 하단 절반 모드로 내려 지도가 보이게 함
+  setMainViewMode("map", "fairy_nav", false);
+  const sheet = document.getElementById("mainBottomSheet");
+  if (sheet) {
+    sheet.classList.remove("hidden");
+    sheet.classList.add("is-fairy-nav");
+  }
+
   trackEvent("start_fairy_navigation", {
     place_id: place.id,
     place_name: place.name,
@@ -2363,8 +2605,8 @@ async function startFairyNavigation(place, originMode = "anchor") {
   );
 }
 
-// 17. 5-2절: 지도 렌더링 (줌아웃 시 제미나이·화이트 불빛 오브, 줌인(>=15) 또는 선택 시 카페 이름 표시)
-const MAP_LABEL_ZOOM_THRESHOLD = 15;
+// 17. 5-2절: 지도 렌더링 (평소 줌(15 이하)에는 제미나이·화이트 불빛 오브, 줌인(>=16) 또는 선택 시 카페 이름 표시)
+const MAP_LABEL_ZOOM_THRESHOLD = 16;
 
 function syncMapZoomClass() {
   const mapStage = document.getElementById("mapStage");
@@ -2378,7 +2620,7 @@ function initLeafletMapIfNeeded() {
 
   leafletMap = L.map("leafletMap", {
     zoomControl: false,
-  }).setView([state.anchorCoord.lat, state.anchorCoord.lng], 14);
+  }).setView([state.anchorCoord.lat, state.anchorCoord.lng], 15);
 
   // 채도 낮은 밝은 지도 (밤 시간대에는 body.is-night-mode 필터로 어두워짐)
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -2457,7 +2699,7 @@ function renderMapView(displayedPlaces) {
 
   anchorMarker = L.marker([state.anchorCoord.lat, state.anchorCoord.lng], {
     icon: anchorIcon,
-    zIndexOffset: 900,
+    zIndexOffset: 150,
   }).addTo(leafletMap);
 
   anchorMarker.on("click", (e) => {
@@ -2475,11 +2717,42 @@ function renderMapView(displayedPlaces) {
 
   const cupSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 1 1 0 8h-1"></path><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path></svg>`;
 
+  // 인접 건물·동일 상가 내 카페들의 이름 캡슐이 줌인 시 서로 가리지 않도록 미세 수직 오프셋 계산
+  const placedLabelBoxes = [];
+  const labelOffsetsById = new Map();
+  displayedPlaces.forEach((p) => {
+    let offsetY = 0;
+    const candidateOffsets = [0, -18, 18, -34, 34];
+    for (let i = 0; i < candidateOffsets.length; i++) {
+      const candY = candidateOffsets[i];
+      const effLat = p.lat - candY * 0.000011;
+      const hasCollision = placedLabelBoxes.some(
+        (box) =>
+          Math.abs(effLat - box.effLat) < 0.00018 &&
+          Math.abs(p.lng - box.lng) < 0.00072
+      );
+      if (!hasCollision) {
+        offsetY = candY;
+        break;
+      }
+    }
+    placedLabelBoxes.push({
+      effLat: p.lat - offsetY * 0.000011,
+      lng: p.lng,
+    });
+    labelOffsetsById.set(p.id, offsetY);
+  });
+
   displayedPlaces.forEach((place) => {
     const st = place.businessStatus;
     const isSelected = place.id === state.selectedPlaceId;
     const isClosedPin = !st.isOpen;
     const isClosingSoon = st.state === "closing_soon";
+    const offsetY = labelOffsetsById.get(place.id) || 0;
+    const pinOffsetStyle =
+      offsetY !== 0 && !isSelected
+        ? `style="transform: translateY(${offsetY}px);"`
+        : "";
 
     const markerHtml = `
       <div class="cafe-map-pin-wrap ${isSelected ? "is-selected" : ""}" data-marker-id="${place.id}" title="${place.name}">
@@ -2487,7 +2760,7 @@ function renderMapView(displayedPlaces) {
           <span class="orb-halo"></span>
           <span class="orb-core"></span>
         </div>
-        <div class="cafe-map-pin ${isClosedPin ? "pin-closed" : ""}">
+        <div class="cafe-map-pin ${isClosedPin ? "pin-closed" : ""}" ${pinOffsetStyle}>
           ${cupSvg}
           <span class="cafe-pin-name-text">${place.name}</span>
           ${isClosingSoon ? `<span class="pin-closing-dot" title="곧 마감"></span>` : ""}
@@ -2527,20 +2800,169 @@ function renderMapView(displayedPlaces) {
   });
 }
 
-// 18. 3단계 바텀시트 제어 (peek / half / full)
-function setBottomSheetState(nextState) {
-  const sheet = document.getElementById("mainBottomSheet");
-  if (!sheet) return;
+// 18. 지도 보기 ↔ 카페 목록 보기 탭 전환 & 좌우 스와이프 제스처 & 상세 오버레이 시트 제어
+function setMainViewMode(nextMode, source = "tab", closeDetail = true) {
+  const mode = nextMode === "list" ? "list" : "map";
+  state.activeMainView = mode;
 
-  state.sheetState = nextState;
-  sheet.dataset.sheetState = nextState;
-  sheet.classList.remove("sheet-peek", "sheet-half", "sheet-full");
-  sheet.classList.add(`sheet-${nextState}`);
+  if (closeDetail && state.selectedPlaceId !== null) {
+    closePlaceDetail();
+  }
+
+  const viewport = document.getElementById("mainSwipeViewport");
+  const tabMapBtn = document.getElementById("btnTabMapView");
+  const tabListBtn = document.getElementById("btnTabListView");
+
+  if (viewport) {
+    viewport.dataset.activeView = mode;
+  }
+  if (tabMapBtn) {
+    const isMap = mode === "map";
+    tabMapBtn.classList.toggle("is-active", isMap);
+    tabMapBtn.setAttribute("aria-selected", isMap ? "true" : "false");
+  }
+  if (tabListBtn) {
+    const isList = mode === "list";
+    tabListBtn.classList.toggle("is-active", isList);
+    tabListBtn.setAttribute("aria-selected", isList ? "true" : "false");
+  }
+
+  if (mode === "map" && leafletMap) {
+    setTimeout(() => {
+      leafletMap.invalidateSize();
+    }, 280);
+  }
 
   trackEvent("view_toggle", {
-    view_mode: nextState,
-    source: "bottom_sheet",
+    view_mode: mode,
+    source,
   });
+}
+
+function setBottomSheetState(nextState) {
+  state.sheetState = nextState;
+}
+
+function initHorizontalSwipeNavigation() {
+  const listStage = document.getElementById("listStage");
+  const switchBar = document.getElementById("viewModeSwitchBar");
+  const topControlPanel = document.getElementById("topControlPanel");
+  const mapStage = document.getElementById("mapStage");
+
+  // 1) 카페 목록 화면에서 오른쪽으로 스와이프하면 지도 화면으로 전환
+  if (listStage) {
+    let startX = null;
+    let startY = null;
+    listStage.addEventListener(
+      "touchstart",
+      (e) => {
+        if (e.touches.length !== 1) return;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+      },
+      { passive: true }
+    );
+    listStage.addEventListener(
+      "touchend",
+      (e) => {
+        if (startX === null || startY === null) return;
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+        const dx = touch.clientX - startX;
+        const dy = touch.clientY - startY;
+        startX = null;
+        startY = null;
+        if (dx > 52 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+          setMainViewMode("map", "swipe_right_from_list");
+        }
+      },
+      { passive: true }
+    );
+  }
+
+  // 2) 상단 컨트롤 패널/탭 바에서 좌우 스와이프 시 지도 ↔ 목록 전환 (단, 가로 스크롤 트랙 위는 제외)
+  const attachBarSwipe = (el) => {
+    if (!el) return;
+    let bStartX = null;
+    let bStartY = null;
+    el.addEventListener(
+      "touchstart",
+      (e) => {
+        if (
+          e.target.closest(".mood-rail") ||
+          e.target.closest(".inline-detail-panel") ||
+          e.target.closest(".fairy-quick-time-row")
+        ) {
+          bStartX = null;
+          return;
+        }
+        if (e.touches.length !== 1) return;
+        bStartX = e.touches[0].clientX;
+        bStartY = e.touches[0].clientY;
+      },
+      { passive: true }
+    );
+    el.addEventListener(
+      "touchend",
+      (e) => {
+        if (bStartX === null || bStartY === null) return;
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+        const dx = touch.clientX - bStartX;
+        const dy = touch.clientY - bStartY;
+        bStartX = null;
+        bStartY = null;
+        if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+          if (dx < 0) {
+            setMainViewMode("list", "swipe_left");
+          } else {
+            setMainViewMode("map", "swipe_right");
+          }
+        }
+      },
+      { passive: true }
+    );
+  };
+
+  attachBarSwipe(switchBar);
+  attachBarSwipe(topControlPanel);
+
+  // 3) 지도 오른쪽 가장자리(우측 36px 이내)에서 왼쪽으로 스와이프 시 목록 화면으로 전환
+  if (mapStage) {
+    let edgeStartX = null;
+    let edgeStartY = null;
+    mapStage.addEventListener(
+      "touchstart",
+      (e) => {
+        if (e.touches.length !== 1) return;
+        const rect = mapStage.getBoundingClientRect();
+        const x = e.touches[0].clientX;
+        if (rect.right - x <= 38) {
+          edgeStartX = x;
+          edgeStartY = e.touches[0].clientY;
+        } else {
+          edgeStartX = null;
+        }
+      },
+      { passive: true }
+    );
+    mapStage.addEventListener(
+      "touchend",
+      (e) => {
+        if (edgeStartX === null || edgeStartY === null) return;
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+        const dx = touch.clientX - edgeStartX;
+        const dy = touch.clientY - edgeStartY;
+        edgeStartX = null;
+        edgeStartY = null;
+        if (dx < -45 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+          setMainViewMode("list", "edge_swipe_left_from_map");
+        }
+      },
+      { passive: true }
+    );
+  }
 }
 
 function initBottomSheetDrag() {
@@ -2549,72 +2971,32 @@ function initBottomSheetDrag() {
   if (!dragZone || !sheet) return;
 
   let startY = null;
-  let startHeight = 0;
-  let moved = false;
 
-  const onPointerDown = (clientY) => {
-    startY = clientY;
-    startHeight = sheet.getBoundingClientRect().height;
-    moved = false;
-  };
-
-  const onPointerMove = (clientY) => {
-    if (startY === null) return;
-    const deltaY = startY - clientY;
-    if (Math.abs(deltaY) > 6) moved = true;
-  };
-
-  const onPointerUp = (clientY) => {
-    if (startY === null) return;
-    const deltaY = startY - clientY;
-    startY = null;
-
-    if (!moved) {
-      // 탭/클릭 시 단계 순환: peek -> half -> full -> half
-      if (state.sheetState === "peek") setBottomSheetState("half");
-      else if (state.sheetState === "half") setBottomSheetState("full");
-      else setBottomSheetState("peek");
-      return;
-    }
-
-    if (deltaY > 45) {
-      if (state.sheetState === "peek") setBottomSheetState("half");
-      else setBottomSheetState("full");
-    } else if (deltaY < -45) {
-      if (state.sheetState === "full") setBottomSheetState("half");
-      else setBottomSheetState("peek");
-    }
-  };
+  dragZone.addEventListener("click", () => {
+    closePlaceDetail();
+  });
 
   dragZone.addEventListener(
     "touchstart",
     (e) => {
-      if (e.touches.length === 1) onPointerDown(e.touches[0].clientY);
-    },
-    { passive: true }
-  );
-  dragZone.addEventListener(
-    "touchmove",
-    (e) => {
-      if (e.touches.length === 1) onPointerMove(e.touches[0].clientY);
+      if (e.touches.length === 1) startY = e.touches[0].clientY;
     },
     { passive: true }
   );
   dragZone.addEventListener("touchend", (e) => {
+    if (startY === null) return;
     const touch = e.changedTouches[0];
-    onPointerUp(touch ? touch.clientY : startY);
+    const deltaY = touch ? touch.clientY - startY : 0;
+    startY = null;
+    if (deltaY > 38) {
+      closePlaceDetail();
+    }
   });
-
-  dragZone.addEventListener("mousedown", (e) => onPointerDown(e.clientY));
-  window.addEventListener("mousemove", (e) => onPointerMove(e.clientY));
-  window.addEventListener("mouseup", (e) => onPointerUp(e.clientY));
 
   dragZone.addEventListener("keydown", (e) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (state.sheetState === "peek") setBottomSheetState("half");
-      else if (state.sheetState === "half") setBottomSheetState("full");
-      else setBottomSheetState("peek");
+      closePlaceDetail();
     }
   });
 }
@@ -2815,17 +3197,47 @@ function renderAll(recenterMap = false) {
   if (recenterMap && leafletMap) {
     setTimeout(() => {
       leafletMap.invalidateSize();
-      if (radiusCircle) {
-        leafletMap.fitBounds(radiusCircle.getBounds(), { padding: [20, 20] });
-      } else {
-        leafletMap.setView([state.anchorCoord.lat, state.anchorCoord.lng], 15);
-      }
+      const targetZoom =
+        state.radiusMeters === 300 || state.radiusMeters === 500
+          ? 16
+          : state.radiusMeters === 1000
+          ? 15
+          : 14;
+      leafletMap.setView([state.anchorCoord.lat, state.anchorCoord.lng], targetZoom);
+      syncMapZoomClass();
     }, 50);
   }
 }
 
 // 22. 이벤트 바인딩
 function bindEvents() {
+  // 지도 보기 ↔ 카페 목록 보기 탭 및 플로팅 전환 버튼
+  const btnTabMapView = document.getElementById("btnTabMapView");
+  const btnTabListView = document.getElementById("btnTabListView");
+  const btnFloatingToList = document.getElementById("btnFloatingToList");
+  const btnListBackToMap = document.getElementById("btnListBackToMap");
+
+  if (btnTabMapView) {
+    btnTabMapView.addEventListener("click", () => {
+      setMainViewMode("map", "top_tab");
+    });
+  }
+  if (btnTabListView) {
+    btnTabListView.addEventListener("click", () => {
+      setMainViewMode("list", "top_tab");
+    });
+  }
+  if (btnFloatingToList) {
+    btnFloatingToList.addEventListener("click", () => {
+      setMainViewMode("list", "map_floating_pill");
+    });
+  }
+  if (btnListBackToMap) {
+    btnListBackToMap.addEventListener("click", () => {
+      setMainViewMode("map", "list_guide_btn");
+    });
+  }
+
   // 캠퍼스 세그먼트 전환
   document.querySelectorAll(".campus-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -2885,6 +3297,22 @@ function bindEvents() {
   const btnMenuOffer = document.getElementById("btnMenuOffer");
   if (btnMenuOffer) {
     btnMenuOffer.addEventListener("click", () => openOfferModal("header_menu"));
+  }
+
+  const btnRefreshLiveInfo = document.getElementById("btnRefreshLiveInfo");
+  if (btnRefreshLiveInfo) {
+    btnRefreshLiveInfo.addEventListener("click", () => {
+      refreshAllLiveBusinessInfo();
+    });
+  }
+
+  const btnMenuRefreshLive = document.getElementById("btnMenuRefreshLive");
+  if (btnMenuRefreshLive) {
+    btnMenuRefreshLive.addEventListener("click", () => {
+      const headerDropdown = document.getElementById("headerMenuDropdown");
+      if (headerDropdown) headerDropdown.classList.add("hidden");
+      refreshAllLiveBusinessInfo();
+    });
   }
 
   const btnOpenOfferFromList = document.getElementById("btnOpenOfferFromList");
@@ -3477,6 +3905,7 @@ async function initApp() {
   mountMoodCardsOnce();
   mountDetailChipsOnce();
   initBottomSheetDrag();
+  initHorizontalSwipeNavigation();
   bindEvents();
 
   setLoadingState(true, "자리 알아보는 중…");

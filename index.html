@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
   <!-- App Stylesheet -->
-  <link rel="stylesheet" href="./style.css?v=20261102_9" />
+  <link rel="stylesheet" href="./style.css?v=20261102_14" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -82,6 +82,21 @@
           </button>
         </div>
 
+        <button
+          type="button"
+          class="header-refresh-btn"
+          id="btnRefreshLiveInfo"
+          aria-label="최신 영업정보 실시간 갱신"
+          title="최신 영업정보 실시간 갱신"
+        >
+          <svg class="refresh-svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          <span>갱신</span>
+        </button>
+
         <div class="header-menu-wrap">
           <button
             type="button"
@@ -98,8 +113,16 @@
             </svg>
           </button>
 
-          <!-- 헤더 메뉴 드롭다운 (공유, 홈 화면 추가, Google AI Pro 학생 혜택) -->
+          <!-- 헤더 메뉴 드롭다운 (최신 영업정보 갱신, 공유, 홈 화면 추가, Google AI Pro 학생 혜택) -->
           <div class="header-menu-dropdown hidden" id="headerMenuDropdown" role="menu" aria-label="서비스 메뉴">
+            <button type="button" class="menu-item-btn" id="btnMenuRefreshLive" role="menuitem" aria-label="최신 영업정보 일괄 갱신">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              <span>최신 영업정보 일괄 갱신</span>
+            </button>
             <button type="button" class="menu-item-btn" id="btnMenuShare" role="menuitem" aria-label="카공맵 링크 공유하기">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="18" cy="5" r="3"></circle>
@@ -136,253 +159,297 @@
       </div>
     </header>
 
-    <!-- 5-2. 전체화면 지도 영역 -->
-    <main class="map-stage" id="mapStage" aria-label="카공 카페 지도">
-      <div id="leafletMap" class="leaflet-canvas"></div>
-
-      <!-- 로딩 오버레이 (fairy-fly.webp + "자리 알아보는 중…") -->
-      <div class="map-loading-pill hidden" id="loadingIndicator" role="status" aria-live="polite">
-        <img src="./assets/fairy/fairy-fly.webp?v=20261102_4" alt="" class="loading-fairy fairy-float" width="46" height="42" />
-        <span id="loadingText">자리 알아보는 중…</span>
-      </div>
-
-      <!-- 오른쪽 아래 커스텀 지도 컨트롤 (내 위치 + 확대/축소) -->
-      <div class="map-custom-controls" aria-label="지도 제어 버튼">
-        <button type="button" class="map-ctrl-btn" id="btnMapMyLocation" aria-label="내 위치로 기준점 변경">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M12 2v3"></path>
-            <path d="M12 19v3"></path>
-            <path d="M2 12h3"></path>
-            <path d="M19 12h3"></path>
-            <circle cx="12" cy="12" r="7"></circle>
-          </svg>
-        </button>
-        <div class="map-zoom-group">
-          <button type="button" class="map-ctrl-btn zoom-in" id="btnMapZoomIn" aria-label="지도 확대">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-          </button>
-          <button type="button" class="map-ctrl-btn zoom-out" id="btnMapZoomOut" aria-label="지도 축소">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-          </button>
+    <!-- 상단 통합 컨트롤 패널 (요정 인사 + 카공 카드/세부 조건 탭 + 기준점·시간 필터 + 지도/목록 전환 탭) -->
+    <section class="top-control-panel" id="topControlPanel" aria-label="카공 카페 필터 및 화면 전환">
+      <!-- 4-1 & 4-2. 「오늘의 카공 카드 선택」 — [3D 요정 + 선택 안내 문구] — 「카페 세부 조건 선택」 -->
+      <div class="filter-section-container" id="fairyGreetingBar">
+        <div class="fairy-center-prompt-row" id="greetingTextTrigger" role="button" tabindex="0" aria-label="카공 조건 선택 안내">
+          <span class="fairy-prompt-arrow" aria-hidden="true">↙</span>
+          <p class="greeting-text" id="greetingText">원하는 카공 카드나 세부 조건을 선택해보세요!</p>
+          <span class="fairy-prompt-arrow" aria-hidden="true">↘</span>
         </div>
-      </div>
-    </main>
 
-    <!-- 5-1 & 5-4. 화면의 유일한 하단 고정 요소: 3단계 드래그 바텀시트 (peek / half / full) -->
-    <section
-      class="bottom-sheet sheet-half"
-      id="mainBottomSheet"
-      aria-label="카공 카페 탐색 시트"
-      data-sheet-state="half"
-    >
-      <!-- 드래그 핸들 영역 (클릭 시 단계 순환, 터치/마우스 드래그 지원) -->
-      <div class="sheet-drag-zone" id="sheetDragZone" role="button" tabindex="0" aria-label="시트 크기 조절 핸들">
-        <div class="sheet-handle-bar"></div>
-      </div>
-
-      <!-- 시트 내부 뷰 1: 목록 및 상황 탐색 뷰 -->
-      <div class="sheet-list-view" id="sheetListView">
-        <!-- 첫 진입 3D 팝아웃 요정 삼총사 인사 바 (뒤에 은은한 파란빛 후광 적용) -->
-        <div class="fairy-greeting-bar" id="fairyGreetingBar">
+        <div class="filter-category-tabs" role="tablist" aria-label="카공 탐색 방식 선택">
           <button
             type="button"
-            class="greeting-fairy-btn fairy-gemini-halo"
+            class="filter-cat-tab"
+            id="tabMoodCards"
+            data-filter-tab="mood"
+            role="tab"
+            aria-selected="false"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"></path>
+            </svg>
+            <span id="tabMoodCardsLabel">오늘의 카공 카드 선택</span>
+          </button>
+
+          <!-- 두 선택 버튼 사이에 위치한 3D 요정 삼총사 -->
+          <button
+            type="button"
+            class="between-tabs-fairy-btn fairy-gemini-halo"
             id="btnFairyCheer"
-            aria-label="요정 삼총사 눌러서 응원 메시지 보기"
+            aria-label="요정 삼총사 눌러서 카공 팁 보기"
           >
             <img
               src="./assets/fairy/fairy-trio.webp?v=20261102_6"
               alt="요정 삼총사"
-              class="greeting-fairy-img fairy-float"
+              class="between-tabs-fairy-img fairy-float"
               id="greetingFairyImg"
-              width="86"
-              height="62"
+              width="56"
+              height="42"
             />
           </button>
-          <div class="greeting-content-col">
-            <div class="greeting-text-wrap" id="greetingTextTrigger" role="button" tabindex="0" aria-label="다른 응원 문구 보기">
-              <p class="greeting-text" id="greetingText">오늘은 어디서 공부할까요?</p>
-            </div>
-            <div class="fairy-quick-time-row" id="fairyQuickTimeRow" role="group" aria-label="방문 시간대 빠른 선택">
-              <button type="button" class="fairy-time-pill is-active" data-quick-time="now">지금</button>
-              <button type="button" class="fairy-time-pill" data-quick-time="morning09">내일 아침 9시</button>
-              <button type="button" class="fairy-time-pill" data-quick-time="afternoon14">오후 2시</button>
-              <button type="button" class="fairy-time-pill" data-quick-time="tonight22">밤 10시</button>
-              <button type="button" class="fairy-time-pill" data-quick-time="all_places">닫은 곳도 보기</button>
-            </div>
-          </div>
-          <button type="button" class="greeting-dismiss-btn" id="btnDismissGreeting" aria-label="인사말 닫기">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
+
+          <button
+            type="button"
+            class="filter-cat-tab"
+            id="btnOpenDetailFilter"
+            data-filter-tab="detail"
+            role="tab"
+            aria-selected="false"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="4" y1="21" x2="4" y2="14"></line>
+              <line x1="4" y1="10" x2="4" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12" y2="3"></line>
+              <line x1="20" y1="21" x2="20" y2="16"></line>
+              <line x1="20" y1="12" x2="20" y2="3"></line>
+              <line x1="1" y1="14" x2="7" y2="14"></line>
+              <line x1="9" y1="8" x2="15" y2="8"></line>
+              <line x1="17" y1="16" x2="23" y2="16"></line>
             </svg>
+            <span class="detail-btn-label" id="detailFilterBtnLabel">카페 세부 조건 선택</span>
           </button>
         </div>
 
-        <!-- 4-1 & 4-2. 「오늘의 카공 카드 선택」 / 「카페 세부 조건 선택」 2분할 탭 (둘 중 하나만 선택 가능, 안 누르면 아래 서랍 숨김) -->
-        <div class="filter-section-container">
-          <div class="filter-category-tabs" role="tablist" aria-label="카공 탐색 방식 선택">
-            <button
-              type="button"
-              class="filter-cat-tab"
-              id="tabMoodCards"
-              data-filter-tab="mood"
-              role="tab"
-              aria-selected="false"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"></path>
-              </svg>
-              <span id="tabMoodCardsLabel">오늘의 카공 카드 선택</span>
-            </button>
-
-            <button
-              type="button"
-              class="filter-cat-tab"
-              id="btnOpenDetailFilter"
-              data-filter-tab="detail"
-              role="tab"
-              aria-selected="false"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <line x1="4" y1="21" x2="4" y2="14"></line>
-                <line x1="4" y1="10" x2="4" y2="3"></line>
-                <line x1="12" y1="21" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12" y2="3"></line>
-                <line x1="20" y1="21" x2="20" y2="16"></line>
-                <line x1="20" y1="12" x2="20" y2="3"></line>
-                <line x1="1" y1="14" x2="7" y2="14"></line>
-                <line x1="9" y1="8" x2="15" y2="8"></line>
-                <line x1="17" y1="16" x2="23" y2="16"></line>
-              </svg>
-              <span class="detail-btn-label" id="detailFilterBtnLabel">카페 세부 조건 선택</span>
-            </button>
+        <!-- 패널 1: 오늘의 카공 카드 선택 (기본 숨김, 탭 클릭 시에만 열림) -->
+        <div class="mood-scroll-wrapper hidden" id="moodCardsPanel">
+          <div class="mood-rail" id="moodRail" role="region" aria-label="오늘의 카공 카드 목록">
+            <div class="mood-cards-track" id="moodCardsTrack" role="radiogroup" aria-label="상황 카드 목록"></div>
           </div>
-
-          <!-- 패널 1: 오늘의 카공 카드 선택 (기본 숨김, 탭 클릭 시에만 열림) -->
-          <div class="mood-scroll-wrapper hidden" id="moodCardsPanel">
-            <div class="mood-rail" id="moodRail" role="region" aria-label="오늘의 카공 카드 목록">
-              <div class="mood-cards-track" id="moodCardsTrack" role="radiogroup" aria-label="상황 카드 목록"></div>
-            </div>
-            <div class="scroll-fade-right" aria-hidden="true"></div>
-          </div>
-
-          <!-- 패널 2: 카페 세부 조건 선택 (기본 숨김, 탭 클릭 시에만 열림) -->
-          <div class="inline-detail-panel hidden" id="inlineDetailPanel" role="region" aria-label="카페 세부 조건 선택">
-            <div class="inline-detail-track" id="inlineDetailTrack"></div>
-            <button type="button" class="inline-detail-reset-btn hidden" id="btnInlineDetailReset">초기화</button>
-          </div>
+          <div class="scroll-fade-right" aria-hidden="true"></div>
         </div>
 
-        <!-- 5-1 & 3-2. 결과 요약 + 기준점 드롭다운 + 반경 드롭다운 + 방문 시각 + 영업 중만 토글 -->
-        <div class="sheet-control-row">
-          <div class="summary-dropdown-group">
-            <span class="result-count-text" id="resultCountSummary">영업 중 0곳</span>
-            <span class="dot-sep" aria-hidden="true">·</span>
+        <!-- 패널 2: 카페 세부 조건 선택 (기본 숨김, 탭 클릭 시에만 열림) -->
+        <div class="inline-detail-panel hidden" id="inlineDetailPanel" role="region" aria-label="카페 세부 조건 선택">
+          <div class="inline-detail-track" id="inlineDetailTrack"></div>
+          <button type="button" class="inline-detail-reset-btn hidden" id="btnInlineDetailReset">초기화</button>
+        </div>
+      </div>
 
-            <!-- 기준점 드롭다운 (기준: 정문 ▾) -->
-            <label class="inline-select-wrap" for="selectAnchor">
-              <select id="selectAnchor" class="clean-select" aria-label="기준점 선택"></select>
-              <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </label>
+      <!-- 5-1 & 3-2. 결과 요약 + 기준점 드롭다운 + 반경 드롭다운 + 방문 시각 + 영업 중만 토글 -->
+      <div class="sheet-control-row">
+        <div class="summary-dropdown-group">
+          <span class="result-count-text" id="resultCountSummary">영업 중 0곳</span>
+          <span class="dot-sep" aria-hidden="true">·</span>
 
-            <!-- 반경 드롭다운 (1km ▾ : 300m / 500m / 1km / 전체) -->
-            <label class="inline-select-wrap" for="selectRadius">
-              <select id="selectRadius" class="clean-select" aria-label="탐색 반경 선택">
-                <option value="300">300m</option>
-                <option value="500">500m</option>
-                <option value="1000" selected>1km</option>
-                <option value="0">전체</option>
-              </select>
-              <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </label>
+          <!-- 기준점 드롭다운 (기준: 정문 ▾) -->
+          <label class="inline-select-wrap" for="selectAnchor">
+            <select id="selectAnchor" class="clean-select" aria-label="기준점 선택"></select>
+            <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </label>
+
+          <!-- 반경 드롭다운 (1km ▾ : 300m / 500m / 1km / 전체) -->
+          <label class="inline-select-wrap" for="selectRadius">
+            <select id="selectRadius" class="clean-select" aria-label="탐색 반경 선택">
+              <option value="300">300m</option>
+              <option value="500">500m</option>
+              <option value="1000" selected>1km</option>
+              <option value="0">전체</option>
+            </select>
+            <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </label>
+        </div>
+
+        <div class="time-open-controls">
+          <!-- 언제 갈 거예요? 시간 선택 -->
+          <label class="inline-select-wrap time-select-wrap" for="selectVisitTime">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <select id="selectVisitTime" class="clean-select" aria-label="방문 예정 시각 선택">
+              <option value="now" selected>지금</option>
+              <option value="morning09">아침 9시</option>
+              <option value="afternoon14">오후 2시</option>
+              <option value="tonight22">오늘 밤 10시</option>
+              <option value="custom">직접 선택</option>
+            </select>
+            <svg class="select-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </label>
+
+          <!-- 직접 선택 시 노출되는 시간 입력 -->
+          <input
+            type="time"
+            id="customTimeInput"
+            class="custom-time-input hidden"
+            value="23:00"
+            aria-label="직접 방문 시각 입력"
+          />
+
+          <!-- 지금 영업 중만 토글 (기본 ON) -->
+          <button
+            type="button"
+            class="open-now-toggle active"
+            id="btnToggleOpenNow"
+            role="switch"
+            aria-checked="true"
+            aria-label="영업 중인 카페만 보기"
+          >
+            <span>영업 중만</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 지도 보기 ↔ 카페 목록 보기 탭 전환 바 (클릭 및 좌우 스와이프 전환 지원) -->
+      <div class="view-mode-switch-bar" id="viewModeSwitchBar" role="tablist" aria-label="지도 및 카페 목록 화면 전환">
+        <button
+          type="button"
+          class="view-mode-tab is-active"
+          id="btnTabMapView"
+          data-view-mode="map"
+          role="tab"
+          aria-selected="true"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon>
+            <line x1="8" y1="2" x2="8" y2="18"></line>
+            <line x1="16" y1="6" x2="16" y2="22"></line>
+          </svg>
+          <span>지도 보기</span>
+        </button>
+        <button
+          type="button"
+          class="view-mode-tab"
+          id="btnTabListView"
+          data-view-mode="list"
+          role="tab"
+          aria-selected="false"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="8" y1="6" x2="21" y2="6"></line>
+            <line x1="8" y1="12" x2="21" y2="12"></line>
+            <line x1="8" y1="18" x2="21" y2="18"></line>
+            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+          </svg>
+          <span id="tabListViewLabel">카페 목록 보기</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 좌우 스와이프 & 탭 전환 메인 뷰포트 (슬라이드 1: 전체 지도 / 슬라이드 2: 카페 목록) -->
+    <div class="main-swipe-viewport" id="mainSwipeViewport" data-active-view="map">
+      <div class="main-swipe-track" id="mainSwipeTrack">
+        <!-- 슬라이드 1: 가림 없는 전체 지도 영역 (첫 진입 기본 화면) -->
+        <main class="map-stage" id="mapStage" aria-label="카공 카페 지도">
+          <div id="leafletMap" class="leaflet-canvas"></div>
+
+          <!-- 로딩 오버레이 (fairy-fly.webp + "자리 알아보는 중…") -->
+          <div class="map-loading-pill hidden" id="loadingIndicator" role="status" aria-live="polite">
+            <img src="./assets/fairy/fairy-fly.webp?v=20261102_6" alt="" class="loading-fairy fairy-float" width="46" height="42" />
+            <span id="loadingText">자리 알아보는 중…</span>
           </div>
 
-          <div class="time-open-controls">
-            <!-- 언제 갈 거예요? 시간 선택 -->
-            <label class="inline-select-wrap time-select-wrap" for="selectVisitTime">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
-              </svg>
-              <select id="selectVisitTime" class="clean-select" aria-label="방문 예정 시각 선택">
-                <option value="now" selected>지금</option>
-                <option value="morning09">아침 9시</option>
-                <option value="afternoon14">오후 2시</option>
-                <option value="tonight22">오늘 밤 10시</option>
-                <option value="custom">직접 선택</option>
-              </select>
-              <svg class="select-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </label>
+          <!-- 지도 좌측 하단: 목록 화면으로 바로 넘어가는 플로팅 스와이프·탭 알약 버튼 -->
+          <button
+            type="button"
+            class="map-floating-list-pill"
+            id="btnFloatingToList"
+            aria-label="카페 목록 화면으로 전환"
+          >
+            <span>📋 목록으로 보기</span>
+            <span class="floating-list-count-badge" id="floatingListCountBadge">0곳</span>
+            <span aria-hidden="true">➔</span>
+          </button>
 
-            <!-- 직접 선택 시 노출되는 시간 입력 -->
-            <input
-              type="time"
-              id="customTimeInput"
-              class="custom-time-input hidden"
-              value="23:00"
-              aria-label="직접 방문 시각 입력"
-            />
-
-            <!-- 지금 영업 중만 토글 (기본 ON) -->
-            <button
-              type="button"
-              class="open-now-toggle active"
-              id="btnToggleOpenNow"
-              role="switch"
-              aria-checked="true"
-              aria-label="영업 중인 카페만 보기"
-            >
-              <span>영업 중만</span>
+          <!-- 오른쪽 아래 커스텀 지도 컨트롤 (내 위치 + 확대/축소) -->
+          <div class="map-custom-controls" aria-label="지도 제어 버튼">
+            <button type="button" class="map-ctrl-btn" id="btnMapMyLocation" aria-label="내 위치로 기준점 변경">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 2v3"></path>
+                <path d="M12 19v3"></path>
+                <path d="M2 12h3"></path>
+                <path d="M19 12h3"></path>
+                <circle cx="12" cy="12" r="7"></circle>
+              </svg>
             </button>
-          </div>
-        </div>
-
-        <!-- 5-3. 카페 목록 스크롤 컨테이너 (카드 높이 96~110px) -->
-        <div class="sheet-scroll-body" id="sheetScrollBody">
-          <div class="place-card-list" id="placeListContainer" role="list"></div>
-        </div>
-
-        <!-- 5-4. 시트 맨 아래(하단) 고정: 카페 건의·후기 버튼 + Google AI Pro 학생 무료 혜택 바 -->
-        <div class="bottom-fixed-offer-wrap">
-          <div class="subtle-offer-banner" id="subtleOfferBanner">
-            <div class="subtle-offer-info">
-              <span class="subtle-offer-title">경희대생 Google AI Pro 1년 무료 혜택</span>
-              <span class="subtle-offer-desc">학교 이메일 인증 가이드 · 나만의 카공 카페 제보</span>
-            </div>
-            <div class="bottom-banner-actions">
-              <button type="button" class="suggest-cafe-pill-btn" id="btnOpenSuggestCafe" aria-label="새 카공 카페 건의하기 또는 후기 남기기">
-                <span>+ 카페 건의</span>
+            <div class="map-zoom-group">
+              <button type="button" class="map-ctrl-btn zoom-in" id="btnMapZoomIn" aria-label="지도 확대">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
               </button>
-              <button type="button" class="subtle-offer-btn" id="btnOpenOfferFromList" aria-label="Google AI Pro 학생 혜택 안내 열기">
-                <span>AI Pro 무료혜택</span>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <polyline points="9 18 15 12 9 6"></polyline>
+              <button type="button" class="map-ctrl-btn zoom-out" id="btnMapZoomOut" aria-label="지도 축소">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
               </button>
             </div>
           </div>
-        </div>
+        </main>
+
+        <!-- 슬라이드 2: 카페 목록 영역 (우측 스와이프 또는 상단 '지도 보기' 탭 클릭 시 지도로 복귀) -->
+        <section class="list-stage" id="listStage" aria-label="카공 카페 목록">
+          <div class="list-swipe-guide-bar" id="listSwipeGuideBar">
+            <span>👈 오른쪽으로 스와이프하면 지도로 돌아가요</span>
+            <button type="button" class="list-back-to-map-btn" id="btnListBackToMap">🗺️ 지도로 보기</button>
+          </div>
+          <div class="sheet-list-view" id="sheetListView">
+            <div class="sheet-scroll-body" id="sheetScrollBody">
+              <div class="place-card-list" id="placeListContainer" role="list"></div>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <!-- 시트 내부 뷰 2: 카페 상세 뷰 (카드나 마커 클릭 시 전환) -->
-      <div class="sheet-detail-view hidden" id="sheetDetailView" aria-live="polite"></div>
+      <!-- 카페 마커/카드 선택 시에만 열리는 상세정보 & 3D 요정 길안내 오버레이 시트 -->
+      <section
+        class="detail-overlay-sheet hidden"
+        id="mainBottomSheet"
+        aria-label="선택한 카페 상세정보 및 길안내"
+      >
+        <div class="sheet-drag-zone" id="sheetDragZone" role="button" tabindex="0" aria-label="상세창 닫기 핸들">
+          <div class="sheet-handle-bar"></div>
+        </div>
+        <!-- 상세 뷰 -->
+        <div class="sheet-detail-view hidden" id="sheetDetailView" aria-live="polite"></div>
+        <!-- 3D 요정 길안내 뷰 -->
+        <div class="sheet-fairy-nav-view hidden" id="sheetFairyNavView" aria-live="polite"></div>
+      </section>
+    </div>
 
-      <!-- 시트 내부 뷰 3: 3D 요정 길안내 모드 뷰 -->
-      <div class="sheet-fairy-nav-view hidden" id="sheetFairyNavView" aria-live="polite"></div>
-    </section>
+    <!-- 화면 맨 아래(하단) 고정: 카페 건의·후기 버튼 + Google AI Pro 학생 무료 혜택 바 -->
+    <div class="bottom-fixed-offer-wrap" id="bottomFixedOfferWrap">
+      <div class="subtle-offer-banner" id="subtleOfferBanner">
+        <div class="subtle-offer-info">
+          <span class="subtle-offer-title">경희대생 Google AI Pro 1년 무료 혜택</span>
+          <span class="subtle-offer-desc">학교 이메일 인증 가이드 · 나만의 카공 카페 제보</span>
+        </div>
+        <div class="bottom-banner-actions">
+          <button type="button" class="suggest-cafe-pill-btn" id="btnOpenSuggestCafe" aria-label="새 카공 카페 건의하기 또는 후기 남기기">
+            <span>+ 카페 건의</span>
+          </button>
+          <button type="button" class="subtle-offer-btn" id="btnOpenOfferFromList" aria-label="Google AI Pro 학생 혜택 안내 열기">
+            <span>AI Pro 무료혜택</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- 4-2. 세부 조건 선택 모달 시트 (AND 다중 선택 + 각 조건 옆에 남는 개수 미리보기) -->
     <div class="modal-backdrop hidden" id="detailFilterModal" role="dialog" aria-modal="true" aria-labelledby="detailFilterTitle">
@@ -614,7 +681,7 @@
 
   <!-- Leaflet 1.9.4 & Hours Engine & App Logic -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="./hours.js?v=20261102_9"></script>
-  <script src="./app.js?v=20261102_9"></script>
+  <script src="./hours.js?v=20261102_14"></script>
+  <script src="./app.js?v=20261102_14"></script>
 </body>
 </html>
