@@ -1260,7 +1260,7 @@ body.is-night-mode .detail-refresh-hours-btn {
 }
 
 .result-count-text {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
@@ -1275,12 +1275,12 @@ body.is-night-mode .detail-refresh-hours-btn {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  min-height: 30px;
+  min-height: 28px;
   padding: 0 5px;
   border-radius: var(--radius-pill);
   background-color: var(--bg-warm);
   border: 1px solid var(--border-color);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -1289,7 +1289,7 @@ body.is-night-mode .detail-refresh-hours-btn {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 11px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
   cursor: pointer;
@@ -3024,3 +3024,658 @@ body.is-night-mode .review-vibe-chip {
   border-color: #334155;
   color: #F8FAFC;
 }
+
+/* =========================================================
+   ✨ AI 프롬프트 카페 추천 입력바 & 추천 결과 카드 + 내 위치(GPS) 3D 요정 배지
+   ========================================================= */
+.ai-prompt-recommend-bar {
+  margin: 4px 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-prompt-input-wrap {
+  height: 36px;
+  padding: 0 4px 0 10px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid #C7D2FE;
+  background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 100%);
+  box-shadow: 0 2px 8px rgba(78, 84, 232, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.ai-prompt-input-wrap:focus-within {
+  border-color: var(--gemini-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16);
+}
+
+.ai-prompt-sparkle-icon {
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ai-prompt-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.ai-prompt-input::placeholder {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.ai-prompt-clear-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #E2E8F0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ai-prompt-submit-btn {
+  height: 28px;
+  padding: 0 11px;
+  border-radius: var(--radius-pill);
+  background: var(--gemini-grad);
+  color: #FFFFFF;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(78, 84, 232, 0.24);
+}
+
+.ai-prompt-result-box {
+  padding: 8px 10px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 55%, #FDF2F8 100%);
+  border: 1.5px solid #C7D2FE;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-prompt-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.ai-prompt-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ai-prompt-badge {
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--gemini-grad);
+  color: #FFFFFF;
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ai-prompt-summary-text {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #1E1B4B;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-prompt-share-btn {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #A5B4FC;
+  color: var(--gemini-primary);
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ai-pick-chips-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 1px;
+}
+
+.ai-pick-chips-row::-webkit-scrollbar {
+  display: none;
+}
+
+.ai-pick-chip {
+  padding: 5px 9px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  border: 1px solid #C7D2FE;
+  box-shadow: 0 2px 5px rgba(30, 41, 59, 0.06);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ai-pick-rank {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: #EEF2FF;
+  color: var(--gemini-primary);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.ai-pick-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ai-pick-meta {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* 지도 내 위치(GPS) 3D 요정 라이브 배지 & пуль스 효과 */
+.fairy-gps-live-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
+  border: 1.5px solid #FFFFFF;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.42);
+  color: #FFFFFF;
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 5;
+}
+
+.fairy-anchor-label-badge {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1.5px 7px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1.2px solid #A5B4FC;
+  box-shadow: 0 2px 6px rgba(30, 41, 59, 0.14);
+  color: #3730A3;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  z-index: 5;
+}
+
+.gps-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ADE80;
+  box-shadow: 0 0 6px #4ADE80;
+}
+
+.fairy-anchor-ring.is-gps-fairy::before {
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(96, 165, 250, 0.65) 45%,
+    rgba(124, 58, 237, 0.32) 74%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+.map-ctrl-btn.is-gps-active {
+  background: var(--gemini-soft-bg);
+  border-color: #6366F1;
+  color: var(--gemini-primary);
+}
+
+body.is-night-mode .ai-prompt-input-wrap {
+  background: #1E293B;
+  border-color: #475569;
+}
+
+body.is-night-mode .ai-prompt-result-box {
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.92) 0%, rgba(49, 16, 66, 0.88) 100%);
+  border-color: #6366F1;
+}
+
+body.is-night-mode .ai-prompt-summary-text {
+  color: #E0E7FF;
+}
+
+body.is-night-mode .ai-pick-chip {
+  background: #0F172A;
+  border-color: #475569;
+}
+
+/* =========================================================
+   🧭 네이버지도 · 카카오맵 스타일 도보 길안내 (상단 Turn-by-Turn HUD + 하단 경로 안내 시트)
+   ========================================================= */
+/* 도보 길안내 실행 시 상단 검색 필터 및 하단 배너를 접어 지도 + 네비 화면에 100% 집중 */
+body.is-fairy-nav-mode .top-control-panel,
+body.is-fairy-nav-mode .filter-section-container,
+body.is-fairy-nav-mode .view-mode-switch-bar,
+body.is-fairy-nav-mode .bottom-fixed-offer-wrap,
+body.is-fairy-nav-mode .map-floating-list-pill {
+  display: none !important;
+}
+
+/* 도보 길안내 중에는 선택되지 않은 다른 카페 이름표와 고정 기준점 요정을 숨겨 경로선과 [출발]/[도착] 배지가 선명하게 보이도록 처리 */
+body.is-fairy-nav-mode .fairy-anchor-marker,
+body.is-fairy-nav-mode .cafe-map-pin-wrap:not(.is-selected) .cafe-map-pin {
+  display: none !important;
+}
+
+body.is-fairy-nav-mode .cafe-map-pin-wrap:not(.is-selected) .cafe-light-orb {
+  display: flex !important;
+  opacity: 0.45;
+}
+
+body.is-fairy-nav-mode .fairy-nav-controls-row {
+  grid-template-columns: 0.95fr 1.18fr 0.95fr 0.72fr;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+body.is-fairy-nav-mode .fairy-step-ctrl-btn {
+  min-height: 36px;
+  padding: 0 6px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.detail-overlay-sheet.is-fairy-nav {
+  top: auto !important;
+  bottom: 0;
+  height: 55%;
+  z-index: 540;
+  box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.2);
+}
+
+/* 지도 상단 플로팅 Turn-by-Turn HUD 배너 (네이버·카카오 네비게이션 상단 안내판) */
+.map-turn-by-turn-hud {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 530;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 52%, #4338CA 100%);
+  color: #FFFFFF;
+  box-shadow: 0 8px 24px rgba(30, 58, 138, 0.36);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  overflow: hidden;
+}
+
+.tbt-hud-main-row {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tbt-turn-icon-box {
+  width: 50px;
+  height: 50px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.tbt-turn-dist {
+  font-size: 11px;
+  font-weight: 800;
+  color: #FDE047;
+  line-height: 1.1;
+}
+
+.tbt-instruction-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tbt-step-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tbt-step-pill {
+  padding: 1.5px 7px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.tbt-eta-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #BFDBFE;
+}
+
+.tbt-primary-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tbt-close-x-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.32);
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tbt-hud-sub-row {
+  padding: 5px 12px;
+  background: rgba(15, 23, 42, 0.35);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.tbt-hud-sub-row.is-arrived {
+  background: rgba(16, 185, 129, 0.32);
+}
+
+.tbt-next-label {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 10px;
+  font-weight: 800;
+  color: #E0E7FF;
+  flex-shrink: 0;
+}
+
+.tbt-next-desc {
+  color: #F1F5F9;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 지도 위 [출발] / [도착] 마커 알약 배지 */
+.route-endpoint-marker {
+  background: transparent;
+  border: none;
+}
+
+.route-endpoint-pill {
+  transform: translate(-50%, -100%);
+  padding: 3px 9px 3px 5px;
+  border-radius: var(--radius-pill);
+  background: #FFFFFF;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.24);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  border: 2px solid #2563EB;
+}
+
+.route-endpoint-pill.is-end {
+  border-color: #EF4444;
+}
+
+.route-endpoint-pill .ep-badge {
+  padding: 1.5px 6px;
+  border-radius: var(--radius-pill);
+  background: #2563EB;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.route-endpoint-pill.is-end .ep-badge {
+  background: #EF4444;
+}
+
+.route-endpoint-pill .ep-name {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #0F172A;
+}
+
+/* 바텀시트 경로 옵션 탭 (추천경로 · 큰길우선 · 최단거리) + 출발지 스위치 */
+.nav-route-options-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.nav-route-type-tabs {
+  display: inline-flex;
+  background: var(--bg-warm);
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-color);
+  gap: 2px;
+}
+
+.nav-route-tab {
+  height: 26px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.nav-route-tab.is-active {
+  background: #2563EB;
+  color: #FFFFFF;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.28);
+}
+
+/* 바텀시트 요약 카드: 큰 소요시간 + 도착예정시각 */
+.nav-big-time-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.nav-big-duration {
+  font-size: 19px;
+  font-weight: 800;
+  color: #1D4ED8;
+  letter-spacing: -0.02em;
+}
+
+.nav-eta-badge {
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  color: #1E40AF;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* 구간별 상세 경로 타임라인 리스트 */
+.nav-step-timeline-section {
+  margin-top: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--bg-warm);
+  border: 1px solid var(--border-color);
+}
+
+.nav-step-timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.nav-step-timeline-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.nav-step-timeline-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.nav-step-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-step-timeline-item {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #FFFFFF;
+  border: 1.5px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  transition: all var(--transition-fast);
+}
+
+.nav-step-timeline-item.is-active,
+.nav-step-timeline-item.is-active-step {
+  background: linear-gradient(135deg, #EFF6FF 0%, #EEF2FF 100%);
+  border-color: #2563EB;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.16);
+}
+
+.nav-step-icon-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #F1F5F9;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-step-timeline-item.is-active-step .nav-step-icon-circle {
+  background: #2563EB;
+  color: #FFFFFF;
+}
+
+.nav-step-text-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-step-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.nav-step-turn-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #1E3A8A;
+}
+
+.nav-step-dist-pill {
+  padding: 1.5px 7px;
+  border-radius: var(--radius-pill);
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  color: #1D4ED8;
+  font-size: 10.5px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.nav-step-desc {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.nav-external-app-row {
+  margin-top: 6px;
+}
+
+

@@ -135,18 +135,21 @@ const state = {
   campus: "seoul",
   anchorKey: "main_gate",
   anchorCoord: { lat: 37.59285, lng: 127.05255, label: "정문" },
-  radiusMeters: 1000, // 300 | 500 | 1000 | 0(전체)
+  userGpsCoord: null, // 실시간 파악된 내 위치(GPS) 좌표
+  radiusMeters: 0, // 기본값: 0(전체 표시, 300 | 500 | 1000 | 0)
   activeMainView: "map", // 'map' | 'list' (첫 진입 시 지도가 가려지지 않도록 지도 탭 기본 활성)
   activeFilterTab: null, // null | 'mood' | 'detail' (둘 다 안 누르면 아래 서랍 숨김, 둘 중 하나만 활성)
   selectedMood: null, // MOOD_CARDS id 또는 null
   selectedDetails: new Set(), // DETAIL_CONDITIONS key Set
-  openNowOnly: true, // 기본 ON ("지금 영업 중만")
+  openNowOnly: false, // 기본 OFF (전체 카페 33곳/32곳 모두 표시 후 영업 중 상단 정렬)
   visitTimeMode: "now", // 'now' | 'morning09' | 'afternoon14' | 'tonight22' | 'custom'
   customTimeValue: "23:00",
   selectedPlaceId: null,
   sheetState: "half", // 'peek' | 'half' | 'full'
   greetingDismissed: false,
   fairyCheerIndex: 0,
+  aiPromptQuery: "", // 사용자가 프롬프트로 입력한 카페 추천 조건
+  aiPromptResult: null,
 };
 
 const FAIRY_CHEER_MESSAGES = [
@@ -218,6 +221,9 @@ function cycleFairyCheerMessage(sourceEl) {
 let leafletMap = null;
 let radiusCircle = null;
 let anchorMarker = null;
+let userGpsMarker = null;
+let gpsAccuracyCircle = null;
+let gpsWatchId = null;
 let placeMarkersLayer = null;
 let markerElementsById = new Map();
 let refreshTimerId = null;
@@ -897,19 +903,24 @@ function syncStateFromURL() {
   const anchorParam = params.get("anchor");
   const moodParam = params.get("mood");
   const radiusParam = params.get("radius");
+  const promptParam = params.get("q") || params.get("prompt");
 
   if (campusParam === "seoul" || campusParam === "global") {
     state.campus = campusParam;
   }
 
   const anchors = CAMPUS_ANCHORS[state.campus];
-  const matchedAnchor = anchors.find((a) => a.key === anchorParam) || anchors[0];
-  state.anchorKey = matchedAnchor.key;
-  state.anchorCoord = {
-    lat: matchedAnchor.lat,
-    lng: matchedAnchor.lng,
-    label: matchedAnchor.label,
-  };
+  if (anchorParam === "gps") {
+    state.anchorKey = "gps";
+  } else {
+    const matchedAnchor = anchors.find((a) => a.key === anchorParam) || anchors[0];
+    state.anchorKey = matchedAnchor.key;
+    state.anchorCoord = {
+      lat: matchedAnchor.lat,
+      lng: matchedAnchor.lng,
+      label: matchedAnchor.label,
+    };
+  }
 
   if (moodParam && MOOD_CARDS.some((m) => m.id === moodParam)) {
     state.selectedMood = moodParam;
@@ -918,6 +929,10 @@ function syncStateFromURL() {
 
   if (radiusParam !== null && ["300", "500", "1000", "0"].includes(radiusParam)) {
     state.radiusMeters = Number(radiusParam);
+  }
+
+  if (promptParam && promptParam.trim()) {
+    state.aiPromptQuery = promptParam.trim();
   }
 }
 
@@ -930,6 +945,12 @@ function updateURLParams() {
   } else {
     url.searchParams.delete("mood");
   }
+  if (state.aiPromptQuery) {
+    url.searchParams.set("q", state.aiPromptQuery);
+  } else {
+    url.searchParams.delete("q");
+    url.searchParams.delete("prompt");
+  }
   window.history.replaceState({}, "", url.toString());
 }
 
@@ -939,6 +960,9 @@ function getCanonicalShareUrl(placeId = null) {
   shareUrl.searchParams.set("anchor", state.anchorKey);
   if (state.selectedMood) {
     shareUrl.searchParams.set("mood", state.selectedMood);
+  }
+  if (state.aiPromptQuery) {
+    shareUrl.searchParams.set("q", state.aiPromptQuery);
   }
   if (placeId) {
     shareUrl.searchParams.set("place", String(placeId));
@@ -1001,12 +1025,20 @@ function applyMoodAndDetails(places, moodId, detailsSet, refDate) {
 
 function getSortedDisplayPlaces(refDate) {
   const base = getBaseFilteredPlaces(refDate);
-  const filtered = applyMoodAndDetails(
+  let filtered = applyMoodAndDetails(
     base,
     state.selectedMood,
     state.selectedDetails,
     refDate
   );
+
+  // 프롬프트 추천 모드가 활성화된 경우 프롬프트 매칭 점수로 추가 정렬/필터
+  if (state.aiPromptQuery && state.aiPromptQuery.trim()) {
+    const scored = scorePlacesByAiPrompt(filtered, state.aiPromptQuery, refDate);
+    if (scored.matchedPlaces.length > 0) {
+      return scored.matchedPlaces;
+    }
+  }
 
   // 5-3절: 기본 정렬은 영업 중 우선 → 거리순
   return filtered.sort((a, b) => {
@@ -1015,6 +1047,342 @@ function getSortedDisplayPlaces(refDate) {
     }
     return a.distance - b.distance;
   });
+}
+
+// 11-2. ✨ AI 프롬프트 카페 추천 엔진 (자연어 문장 분석 + URL ?q=... 프롬프트 링크 공유 지원)
+function parseAiPromptIntent(rawPrompt) {
+  const q = String(rawPrompt || "").trim().toLowerCase();
+  const intent = {
+    raw: String(rawPrompt || "").trim(),
+    campus: null,
+    anchorKey: null,
+    radiusMeters: null,
+    visitTimeMode: null,
+    tags: [],
+    keywords: [],
+    reasons: [],
+  };
+  if (!q) return intent;
+
+  // 1) 캠퍼스 & 기준점 감지
+  if (/국제캠|국캠|수원|영통|서천|사색/.test(q)) {
+    intent.campus = "global";
+    intent.reasons.push("국제캠퍼스");
+  } else if (/서울캠|설캠|회기|외대|이문|청량/.test(q)) {
+    intent.campus = "seoul";
+    intent.reasons.push("서울캠퍼스");
+  }
+
+  if (/내\s*위치|내\s*주변|현\s*위치|가까운/.test(q)) {
+    intent.anchorKey = "gps";
+  } else if (/후문/.test(q)) {
+    intent.anchorKey = "back_gate";
+    intent.campus = "seoul";
+    intent.reasons.push("후문 인근");
+  } else if (/회기역|회기/.test(q)) {
+    intent.anchorKey = "hoegi_stn";
+    intent.campus = "seoul";
+    intent.reasons.push("회기역 인근");
+  } else if (/사색의?\s*광장|사색/.test(q)) {
+    intent.anchorKey = "sasaek_sq";
+    intent.campus = "global";
+    intent.reasons.push("사색의광장 인근");
+  } else if (/영통역|영통/.test(q)) {
+    intent.anchorKey = "yeongtong_stn";
+    intent.campus = "global";
+    intent.reasons.push("영통역 인근");
+  } else if (/정문/.test(q)) {
+    intent.anchorKey = "main_gate";
+    intent.reasons.push("정문 인근");
+  }
+
+  // 2) 거리/반경 감지
+  if (/가까운|근처|코앞|공강|300m|5분/.test(q)) {
+    intent.radiusMeters = 500;
+  }
+
+  // 3) 시간대 감지
+  if (/24시간|밤샘|새벽|올나잇|벼락치기/.test(q)) {
+    intent.tags.push("24시간");
+    intent.reasons.push("24시간·새벽 카공");
+  } else if (/밤\s*늦게|야간|저녁|밤\s*10시|밤\s*11시|늦게까지/.test(q)) {
+    intent.tags.push("밤늦게까지");
+    intent.reasons.push("밤늦게까지 영업");
+  } else if (/아침|오전|일찍|모닝|9시/.test(q)) {
+    intent.visitTimeMode = "morning09";
+    intent.reasons.push("아침 일찍 오픈");
+  }
+
+  // 4) 좌석·분위기·특징 감지
+  if (/콘센트|충전|배터리|노트북|전원|멀티탭/.test(q)) {
+    intent.tags.push("콘센트많음");
+    intent.reasons.push("콘센트 넉넉함");
+  }
+  if (/조용|집중|빡공|독서실|시험/.test(q)) {
+    intent.tags.push("조용한");
+    intent.reasons.push("조용히 집중하기 좋음");
+  }
+  if (/혼자|1인석|혼공|바테이블|창가/.test(q)) {
+    intent.tags.push("1인석");
+    intent.reasons.push("1인석 완비");
+  }
+  if (/팀플|회의|단체|여러\s*명|같이|과제/.test(q)) {
+    intent.tags.push("단체석");
+    intent.reasons.push("팀플·단체석");
+  }
+  if (/예쁜|감성|분위기|인스타|디저트|맛집|케이크|베이글|크루아상|로스터리/.test(q)) {
+    intent.tags.push("분위기좋음");
+    intent.reasons.push("분위기·디저트 맛집");
+  }
+  if (/수다|대화|얘기|떠들/.test(q)) {
+    intent.tags.push("대화가능");
+    intent.reasons.push("대화하며 공부 가능");
+  }
+  if (/싼|저렴|가성비|저가|부담\s*없|메가|컴포즈|빽다방|고씨/.test(q)) {
+    intent.tags.push("저가");
+    intent.reasons.push("가성비 최고");
+  }
+  if (/교내|학교\s*안|캠퍼스\s*안|도서관|중도|청운|네오/.test(q)) {
+    intent.tags.push("교내카페");
+    intent.reasons.push("교내 카페");
+  }
+
+  // 5) 개별 단어 키워드 추출 (가게 이름, 메뉴, 요약문 매칭용)
+  const stopWords = new Set([
+    "카페", "추천", "추천해줘", "추천해", "알려줘", "찾아줘", "어디", "있어", "좋은", "하기", "공부", "카공", "할만한", "곳", "좀", "근처", "주변", "에서", "하고", "싶어", "갈만한"
+  ]);
+  q.split(/[\s,·!?~]+/)
+    .map((w) => w.replace(/(에서|으로|이랑|하고|할래|해줘|추천|카페|근처|주변)$/g, "").trim())
+    .filter((w) => w.length >= 2 && !stopWords.has(w))
+    .forEach((w) => intent.keywords.push(w));
+
+  return intent;
+}
+
+function scorePlacesByAiPrompt(places, rawPrompt, refDate) {
+  const intent = parseAiPromptIntent(rawPrompt);
+  const scoredList = places.map((p) => {
+    let score = 0;
+    const matchedReasons = [];
+
+    // 영업 중 가산점
+    if (p.businessStatus && p.businessStatus.isOpen) {
+      score += 15;
+    }
+
+    // 태그 일치 점수
+    intent.tags.forEach((t) => {
+      if (t === "24시간" && window.HoursEngine.is24HoursPlace(p)) {
+        score += 35;
+        matchedReasons.push("24시간");
+      } else if (t === "밤늦게까지" && window.HoursEngine.isLateNightByHours(p, refDate)) {
+        score += 30;
+        matchedReasons.push("심야영업");
+      } else if (p.tags.includes(t)) {
+        score += 28;
+        matchedReasons.push(TAG_DISPLAY_LABELS[t] || t);
+      }
+    });
+
+    // 거리 가산점 (가까울수록 높은 점수)
+    if (typeof p.distance === "number") {
+      if (p.distance <= 250) score += 18;
+      else if (p.distance <= 500) score += 10;
+      else if (p.distance <= 800) score += 4;
+    }
+
+    // 텍스트 키워드 매칭 (매장 이름, 한줄 요약, 콘센트 설명, 노트)
+    const haystack = `${p.name} ${p.summary} ${p.outlets} ${p.note || ""} ${p.tags.join(" ")}`.toLowerCase();
+    intent.keywords.forEach((kw) => {
+      if (p.name.toLowerCase().includes(kw)) {
+        score += 45;
+      } else if (haystack.includes(kw)) {
+        score += 20;
+      }
+    });
+
+    return {
+      place: p,
+      score,
+      matchedReasons: Array.from(new Set(matchedReasons)),
+    };
+  });
+
+  scoredList.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (a.place.businessStatus.isOpen !== b.place.businessStatus.isOpen) {
+      return a.place.businessStatus.isOpen ? -1 : 1;
+    }
+    return a.place.distance - b.place.distance;
+  });
+
+  const hasSpecificFilter = intent.tags.length > 0 || intent.keywords.length > 0;
+  const matched = hasSpecificFilter
+    ? scoredList.filter((item) => item.score >= 20)
+    : scoredList;
+
+  const finalItems = matched.length > 0 ? matched : scoredList;
+  return {
+    intent,
+    topPicks: finalItems.slice(0, 3),
+    matchedPlaces: finalItems.map((item) => item.place),
+  };
+}
+
+function applyAiPromptRecommendation(rawPrompt, fromUrl = false) {
+  const cleanPrompt = String(rawPrompt || "").trim();
+  const inputEl = document.getElementById("aiPromptInput");
+  const clearBtn = document.getElementById("btnClearAiPrompt");
+  if (inputEl && inputEl.value !== cleanPrompt) {
+    inputEl.value = cleanPrompt;
+  }
+  if (clearBtn) {
+    clearBtn.classList.toggle("hidden", !cleanPrompt);
+  }
+
+  if (!cleanPrompt) {
+    state.aiPromptQuery = "";
+    state.aiPromptResult = null;
+    const box = document.getElementById("aiPromptResultBox");
+    if (box) box.classList.add("hidden");
+    renderAll(false);
+    return;
+  }
+
+  state.aiPromptQuery = cleanPrompt;
+  const intent = parseAiPromptIntent(cleanPrompt);
+
+  // 프롬프트에 캠퍼스나 기준점이 명시된 경우 자동 전환
+  let shouldRecenter = false;
+  if (intent.campus && intent.campus !== state.campus) {
+    state.campus = intent.campus;
+    const defaultAnchor = CAMPUS_ANCHORS[state.campus][0];
+    state.anchorKey = defaultAnchor.key;
+    state.anchorCoord = {
+      lat: defaultAnchor.lat,
+      lng: defaultAnchor.lng,
+      label: defaultAnchor.label,
+    };
+    shouldRecenter = true;
+  }
+
+  if (intent.anchorKey && intent.anchorKey !== "gps") {
+    const foundAnchor = CAMPUS_ANCHORS[state.campus].find(
+      (a) => a.key === intent.anchorKey
+    );
+    if (foundAnchor) {
+      state.anchorKey = foundAnchor.key;
+      state.anchorCoord = {
+        lat: foundAnchor.lat,
+        lng: foundAnchor.lng,
+        label: foundAnchor.label,
+      };
+      shouldRecenter = true;
+    }
+  } else if (intent.anchorKey === "gps" && state.userGpsCoord) {
+    state.anchorKey = "gps";
+    state.anchorCoord = { ...state.userGpsCoord };
+    shouldRecenter = true;
+  }
+
+  if (intent.visitTimeMode) {
+    state.visitTimeMode = intent.visitTimeMode;
+  }
+
+  // 기존 단일 카드/세부조건 충돌 해제 후 전체 반경에서 최적 추천
+  state.selectedMood = null;
+  state.selectedDetails.clear();
+  state.radiusMeters = 0;
+
+  renderAll(shouldRecenter || !fromUrl);
+
+  const greetingImg = document.getElementById("greetingFairyImg");
+  if (greetingImg) triggerFairySparkleAndHop(greetingImg);
+  if (!fromUrl) {
+    showToast("🧚 요정이 프롬프트 조건에 딱 맞는 카공 카페 TOP 3를 골랐어요!");
+  }
+}
+
+function renderAiPromptResultBox(refDate) {
+  const box = document.getElementById("aiPromptResultBox");
+  const clearBtn = document.getElementById("btnClearAiPrompt");
+  if (!box) return;
+
+  if (!state.aiPromptQuery || !state.aiPromptQuery.trim()) {
+    box.classList.add("hidden");
+    if (clearBtn) clearBtn.classList.add("hidden");
+    return;
+  }
+  if (clearBtn) clearBtn.classList.remove("hidden");
+
+  const basePlaces = getBaseFilteredPlaces(refDate);
+  const { intent, topPicks } = scorePlacesByAiPrompt(
+    basePlaces,
+    state.aiPromptQuery,
+    refDate
+  );
+
+  if (topPicks.length === 0) {
+    box.innerHTML = `
+      <div class="ai-prompt-result-header">
+        <span class="ai-prompt-badge">🧚 요정 AI 추천</span>
+        <span class="ai-prompt-summary-text">조건에 맞는 카페를 찾지 못했어요. 다른 키워드로 물어봐 주세요!</span>
+      </div>
+    `;
+    box.classList.remove("hidden");
+    return;
+  }
+
+  const reasonSummary =
+    intent.reasons.length > 0
+      ? `${intent.reasons.join(" · ")} 조건 분석 완료!`
+      : `"${escapeHtmlSafe(state.aiPromptQuery)}" 맞춤 카공 추천 TOP ${topPicks.length}`;
+
+  const picksHtml = topPicks
+    .map((item, idx) => {
+      const p = item.place;
+      const distLabel = formatDistanceLabel(p.distance);
+      const badgeReason =
+        item.matchedReasons.slice(0, 2).join("·") ||
+        p.tags.slice(0, 2).map((t) => TAG_DISPLAY_LABELS[t] || t).join("·");
+      return `
+        <button type="button" class="ai-pick-chip" data-ai-pick-id="${p.id}">
+          <span class="ai-pick-rank">${idx + 1}위</span>
+          <span class="ai-pick-name">${escapeHtmlSafe(p.name)}</span>
+          <span class="ai-pick-meta">${state.anchorCoord.label} ${distLabel}${badgeReason ? ` · ${badgeReason}` : ""}</span>
+        </button>
+      `;
+    })
+    .join("");
+
+  box.innerHTML = `
+    <div class="ai-prompt-result-header">
+      <div class="ai-prompt-title-group">
+        <span class="ai-prompt-badge">🧚 요정 AI 추천</span>
+        <span class="ai-prompt-summary-text">${reasonSummary}</span>
+      </div>
+      <button type="button" class="ai-prompt-share-btn" id="btnShareAiPrompt" title="이 추천 프롬프트가 적용된 사이트 링크 복사">
+        <span>추천링크 복사</span>
+      </button>
+    </div>
+    <div class="ai-pick-chips-row">${picksHtml}</div>
+  `;
+  box.classList.remove("hidden");
+
+  box.querySelectorAll("[data-ai-pick-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const pid = Number(btn.dataset.aiPickId);
+      openPlaceDetail(pid, true);
+    });
+  });
+
+  const shareBtn = document.getElementById("btnShareAiPrompt");
+  if (shareBtn) {
+    shareBtn.addEventListener("click", () => {
+      copyShareLink();
+      showToast("✨ 이 추천 프롬프트가 담긴 사이트 링크가 복사되었어요!");
+    });
+  }
 }
 
 // 12. 선 아이콘(Lucide SVG, stroke-width 1.75) 생성 헬퍼 (이모지 완전 배제)
@@ -1284,18 +1652,27 @@ function renderControlsAndGreeting(displayedPlaces, refDate) {
   const isNightTime = seoulRef.hour >= 19 || seoulRef.hour < 6;
   document.body.classList.toggle("is-night-mode", isNightTime);
 
-  // 결과 요약 (예: "영업 중 8곳" 또는 "아침 9시 영업 18곳")
+  // 결과 요약 (예: "총 29곳·영업 28" 또는 "영업 중 28곳")
   const summaryEl = document.getElementById("resultCountSummary");
   if (summaryEl) {
     const openCount = displayedPlaces.filter((p) => p.businessStatus.isOpen).length;
+    const totalCount = displayedPlaces.length;
     if (state.visitTimeMode === "morning09") {
-      summaryEl.textContent = `아침 9시 영업 ${openCount}곳`;
+      summaryEl.textContent = state.openNowOnly
+        ? `아침 9시 ${openCount}곳`
+        : `총 ${totalCount}곳(9시 ${openCount})`;
     } else if (state.visitTimeMode === "afternoon14") {
-      summaryEl.textContent = `오후 2시 영업 ${openCount}곳`;
+      summaryEl.textContent = state.openNowOnly
+        ? `오후 2시 ${openCount}곳`
+        : `총 ${totalCount}곳(2시 ${openCount})`;
     } else if (state.visitTimeMode === "tonight22") {
-      summaryEl.textContent = `밤 10시 영업 ${openCount}곳`;
+      summaryEl.textContent = state.openNowOnly
+        ? `밤 10시 ${openCount}곳`
+        : `총 ${totalCount}곳(밤10시 ${openCount})`;
     } else {
-      summaryEl.textContent = `영업 중 ${openCount}곳`;
+      summaryEl.textContent = state.openNowOnly
+        ? `영업 중 ${openCount}곳`
+        : `총 ${totalCount}곳 · 영업 ${openCount}`;
     }
   }
 
@@ -1981,7 +2358,7 @@ function closePlaceDetail() {
 }
 
 // =========================================================
-// 16-B. 3D 요정 실시간 도보 길안내 엔진 (지도 오로라 경로 + 비행 요정 + 턴바이턴 안내 + 음성 TTS)
+// 16-B. 3D 요정 실시간 도보 길안내 엔진 (네이버지도·카카오맵 스타일 상단 HUD + 경로옵션 + 구간별 Turn-by-Turn + 3D 요정 비행)
 // =========================================================
 let fairyRouteLayerGroup = null;
 let fairyFlyingMarker = null;
@@ -2003,27 +2380,70 @@ function getCompassDirectionKo(lat1, lng1, lat2, lng2) {
   return "북서쪽";
 }
 
-function generateSmartCampusFootpath(origin, place) {
+function getTurnIconSvg(turnType) {
+  if (turnType === "left") {
+    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>`;
+  }
+  if (turnType === "right") {
+    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"></polyline><path d="M4 20v-7a4 4 0 0 1 4-4h12"></path></svg>`;
+  }
+  if (turnType === "crosswalk") {
+    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="7" y1="8" x2="7" y2="16"></line><line x1="12" y1="8" x2="12" y2="16"></line><line x1="17" y1="8" x2="17" y2="16"></line></svg>`;
+  }
+  if (turnType === "arrive") {
+    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`;
+  }
+  // straight / start
+  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>`;
+}
+
+function getDirectExternalWalkLinks(origin, place) {
+  const { naverUrl, kakaoUrl } = getPlaceExternalLinks(place);
+  // 카카오맵 공식 도보 길찾기 딥링크 (https://map.kakao.com/link/to/목적지명,위도,경도)
+  const kakaoWalkUrl = `https://map.kakao.com/link/to/${encodeURIComponent(
+    place.name
+  )},${place.lat},${place.lng}`;
+  // 네이버 지도 플레이스 또는 검색 연결
+  const naverWalkUrl = naverUrl;
+  return { naverWalkUrl, kakaoWalkUrl, naverUrl, kakaoUrl };
+}
+
+function formatArrivalTimeLabel(durationMin) {
+  const arr = new Date(Date.now() + durationMin * 60000);
+  const hh = arr.getHours();
+  const mm = String(arr.getMinutes()).padStart(2, "0");
+  const ampm = hh >= 12 ? "오후" : "오전";
+  const h12 = hh % 12 === 0 ? 12 : hh % 12;
+  return `${ampm} ${h12}:${mm} 도착 예정`;
+}
+
+function generateSmartCampusFootpath(origin, place, routeOption = "recommend") {
   const lat1 = origin.lat;
   const lng1 = origin.lng;
   const lat2 = place.lat;
   const lng2 = place.lng;
 
   const straightDist = getDistanceMeters(lat1, lng1, lat2, lng2);
-  const walkDist = Math.max(40, Math.round(straightDist * 1.24));
+  const factor = routeOption === "mainroad" ? 1.32 : routeOption === "shortest" ? 1.16 : 1.24;
+  const walkDist = Math.max(40, Math.round(straightDist * factor));
   const durationMin = Math.max(1, Math.round(walkDist / 67));
   const stepsCount = Math.max(50, Math.round(walkDist / 0.7));
+  const calories = Math.max(4, Math.round(walkDist * 0.045));
+  const crosswalkCount = straightDist > 220 ? 1 : 0;
   const dirKo = getCompassDirectionKo(lat1, lng1, lat2, lng2);
 
-  // 실제 거리감을 살린 자연스러운 도로 꺾임 경유점 4단계 생성
+  // 경로 옵션에 따라 굴곡이 조금 다른 자연스러운 도보 경유점 생성
   const dLat = lat2 - lat1;
   const dLng = lng2 - lng1;
-  const wp1 = [lat1 + dLat * 0.34, lng1 + dLng * 0.16];
-  const wp2 = [lat1 + dLat * 0.68, lng1 + dLng * 0.72];
+  const curveBias = routeOption === "mainroad" ? 0.14 : routeOption === "shortest" ? 0.5 : 0.24;
+  const wp1 = [lat1 + dLat * 0.32, lng1 + dLng * curveBias];
+  const wp2 = [lat1 + dLat * 0.66, lng1 + dLng * (1 - curveBias * 0.6)];
+  const wp3 = [lat1 + dLat * 0.86, lng1 + dLng * 0.9];
   const coords = [
     [lat1, lng1],
     wp1,
     wp2,
+    wp3,
     [lat2, lng2],
   ];
 
@@ -2031,51 +2451,87 @@ function generateSmartCampusFootpath(origin, place) {
     place.campus === "seoul"
       ? straightDist <= 260
         ? "경희대로·정문 보행로"
-        : "회기로 메인 거리"
+        : "회기로 메인 보행거리"
       : straightDist <= 300
       ? "국제캠 정문 대학로"
       : "영통 중심상가 보행로";
 
-  const seg1Dist = Math.max(20, Math.round(walkDist * 0.38));
-  const seg2Dist = Math.max(20, walkDist - seg1Dist);
+  const seg1Dist = Math.max(15, Math.round(walkDist * 0.35));
+  const seg2Dist = Math.max(15, Math.round(walkDist * 0.42));
+  const seg3Dist = Math.max(10, walkDist - seg1Dist - seg2Dist);
+  const turnDir = dLng >= 0 ? "right" : "left";
+  const turnLabel = dLng >= 0 ? "우회전" : "좌회전";
 
   const steps = [
     {
-      badge: "1구간 · 출발",
+      badge: "출발",
+      turnType: "straight",
+      turnLabel: "직진 출발",
+      distanceMeters: seg1Dist,
       shortTag: `${origin.label}에서 출발! ✨`,
       coord: [lat1, lng1],
-      instruction: `${origin.label}에서 ${dirKo} 방향(${roadHint})으로 약 ${seg1Dist}m 걸어갈게요!`,
-      tip: `총 도보 약 ${durationMin}분(${walkDist}m · 약 ${stepsCount}걸음) 코스예요. 요정을 따라오세요!`,
+      instruction: `${origin.label}에서 ${dirKo} 방향(${roadHint})으로 ${seg1Dist}m 직진하세요`,
+      subText: `${roadHint} 진입 · 보행자 전용 보도 이용`,
+      tip: `총 도보 약 ${durationMin}분(${walkDist}m · 약 ${stepsCount}걸음) 코스예요.`,
     },
     {
-      badge: "2구간 · 이동 중",
-      shortTag: `${roadHint} 따라 직진 🧚`,
+      badge: "1번째 안내",
+      turnType: crosswalkCount > 0 ? "crosswalk" : "straight",
+      turnLabel: crosswalkCount > 0 ? "횡단보도 건너 직진" : "보행로 따라 직진",
+      distanceMeters: seg2Dist,
+      shortTag: `${roadHint} 따라 ${seg2Dist}m 직진 🧚`,
+      coord: wp1,
+      instruction:
+        crosswalkCount > 0
+          ? `전방 횡단보도를 건넌 뒤 ${roadHint}을 따라 ${seg2Dist}m 이동하세요`
+          : `${roadHint} 메인 보도를 따라 ${seg2Dist}m 직진하세요`,
+      subText: `${roadHint} 중심 구간 · 주변 상가 보도 통과`,
+      tip: `콘센트 정보: ${place.outlets}`,
+    },
+    {
+      badge: "2번째 안내",
+      turnType: turnDir,
+      turnLabel: `${turnLabel} 후 ${seg3Dist}m`,
+      distanceMeters: seg3Dist,
+      shortTag: `${turnLabel} 후 ${seg3Dist}m 앞 매장! ✨`,
       coord: wp2,
-      instruction: `${roadHint}을 따라 ${place.name} 쪽으로 약 ${seg2Dist}m 더 이동해 주세요.`,
-      tip: `콘센트 팁: ${place.outlets}`,
+      instruction: `${place.name} 골목/건물 방향으로 ${turnLabel} 후 ${seg3Dist}m 이동하세요`,
+      subText: `매장 간판 확인 · ${place.hours ? `오늘 영업 ${place.hours}` : "영업시간 확인"}`,
+      tip: `카공 포인트: ${place.summary}`,
     },
     {
-      badge: "3구간 · 도착 완료",
-      shortTag: `${place.name} 도착! 🎉`,
+      badge: "도착",
+      turnType: "arrive",
+      turnLabel: "목적지 도착",
+      distanceMeters: 0,
+      shortTag: `${place.name} 도착 완료! 🎉`,
       coord: [lat2, lng2],
-      instruction: `짜잔! ${place.name}에 도착했어요! 오늘 카공 목표까지 요정이 응원할게요!`,
-      tip: `${place.summary}`,
+      instruction: `${place.name} 도착! 오른쪽/정면 입구로 들어가 카공 명당 자리를 잡아보세요`,
+      subText: `${origin.label}에서 총 ${walkDist}m 이동 완료`,
+      tip: `${place.note || place.outlets}`,
     },
   ];
 
   return {
     origin,
     place,
+    routeOption,
     coords,
     distanceMeters: walkDist,
     durationMin,
     stepsCount,
+    calories,
+    crosswalkCount,
+    arrivalTimeLabel: formatArrivalTimeLabel(durationMin),
     steps,
   };
 }
 
-async function buildFairyWalkingRoute(origin, place) {
-  const fallbackRoute = generateSmartCampusFootpath(origin, place);
+async function buildFairyWalkingRoute(origin, place, routeOption = "recommend") {
+  const fallbackRoute = generateSmartCampusFootpath(origin, place, routeOption);
+  if (routeOption !== "recommend") {
+    return fallbackRoute;
+  }
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 1600);
@@ -2097,39 +2553,33 @@ async function buildFairyWalkingRoute(origin, place) {
     );
     const durationMin = Math.max(1, Math.round(distMeters / 67));
     const stepsCount = Math.max(50, Math.round(distMeters / 0.7));
-    const midIdx = Math.floor(geoCoords.length / 2);
+    const calories = Math.max(4, Math.round(distMeters * 0.045));
+    const idx1 = Math.min(geoCoords.length - 1, Math.floor(geoCoords.length * 0.33));
+    const idx2 = Math.min(geoCoords.length - 1, Math.floor(geoCoords.length * 0.68));
 
-    const steps = [
-      {
-        badge: "1구간 · 출발",
-        shortTag: `${origin.label} 출발! ✨`,
-        coord: geoCoords[0],
-        instruction: fallbackRoute.steps[0].instruction,
-        tip: `실제 도보 경로 약 ${durationMin}분(${distMeters}m · 약 ${stepsCount}걸음) 코스예요.`,
-      },
-      {
-        badge: "2구간 · 보행로 이동",
-        shortTag: `보행로 따라 이동 중 🧚`,
-        coord: geoCoords[midIdx],
-        instruction: fallbackRoute.steps[1].instruction,
-        tip: fallbackRoute.steps[1].tip,
-      },
-      {
-        badge: "3구간 · 도착 완료",
-        shortTag: `${place.name} 도착! 🎉`,
-        coord: geoCoords[geoCoords.length - 1],
-        instruction: fallbackRoute.steps[2].instruction,
-        tip: fallbackRoute.steps[2].tip,
-      },
-    ];
+    const steps = fallbackRoute.steps.map((st, idx) => {
+      const mappedCoord =
+        idx === 0
+          ? geoCoords[0]
+          : idx === 1
+          ? geoCoords[idx1]
+          : idx === 2
+          ? geoCoords[idx2]
+          : geoCoords[geoCoords.length - 1];
+      return {
+        ...st,
+        coord: mappedCoord,
+      };
+    });
 
     return {
-      origin,
-      place,
+      ...fallbackRoute,
       coords: geoCoords,
       distanceMeters: distMeters,
       durationMin,
       stepsCount,
+      calories,
+      arrivalTimeLabel: formatArrivalTimeLabel(durationMin),
       steps,
     };
   } catch (_err) {
@@ -2155,6 +2605,60 @@ function speakFairyInstruction(text) {
   }
 }
 
+function updateMapTurnByTurnHud() {
+  const hudEl = document.getElementById("mapTurnByTurnHud");
+  if (!hudEl) return;
+
+  if (!currentFairyNavSession) {
+    hudEl.classList.add("hidden");
+    hudEl.innerHTML = "";
+    return;
+  }
+
+  const { route, stepIndex } = currentFairyNavSession;
+  const curStep = route.steps[stepIndex] || route.steps[0];
+  const nextStep = route.steps[stepIndex + 1] || null;
+  const distBadgeText =
+    curStep.distanceMeters > 0 ? `${curStep.distanceMeters}m` : "도착";
+
+  hudEl.innerHTML = `
+    <div class="tbt-hud-main-row">
+      <div class="tbt-turn-icon-box" aria-hidden="true">
+        ${getTurnIconSvg(curStep.turnType)}
+        <span class="tbt-turn-dist">${distBadgeText}</span>
+      </div>
+      <div class="tbt-instruction-col">
+        <div class="tbt-step-meta-row">
+          <span class="tbt-step-pill">${curStep.badge} (${stepIndex + 1}/${route.steps.length})</span>
+          <span class="tbt-eta-text">${route.arrivalTimeLabel} · 도보 ${route.durationMin}분</span>
+        </div>
+        <div class="tbt-primary-text">${curStep.instruction}</div>
+      </div>
+      <button type="button" class="tbt-close-x-btn" id="btnHudCloseNav" aria-label="길안내 종료">✕</button>
+    </div>
+    ${
+      nextStep
+        ? `<div class="tbt-hud-sub-row">
+            <span class="tbt-next-label">다음 안내</span>
+            <span class="tbt-next-desc">${nextStep.turnLabel} · ${nextStep.subText}</span>
+          </div>`
+        : `<div class="tbt-hud-sub-row is-arrived">
+            <span class="tbt-next-label">안내 완료</span>
+            <span class="tbt-next-desc">목적지 ${route.place.name}에 도착했습니다! 🎉</span>
+          </div>`
+    }
+  `;
+  hudEl.classList.remove("hidden");
+
+  const btnHudClose = document.getElementById("btnHudCloseNav");
+  if (btnHudClose) {
+    btnHudClose.addEventListener("click", (e) => {
+      e.stopPropagation();
+      stopFairyNavigation(true);
+    });
+  }
+}
+
 function stopFairyNavigation(returnToDetail = true) {
   if (fairyAnimFrameId) {
     cancelAnimationFrame(fairyAnimFrameId);
@@ -2171,15 +2675,25 @@ function stopFairyNavigation(returnToDetail = true) {
   }
   fairyFlyingMarker = null;
 
+  const hudEl = document.getElementById("mapTurnByTurnHud");
+  if (hudEl) {
+    hudEl.classList.add("hidden");
+  }
+
   const sheet = document.getElementById("mainBottomSheet");
   const navView = document.getElementById("sheetFairyNavView");
   const detailView = document.getElementById("sheetDetailView");
+  document.body.classList.remove("is-fairy-nav-mode");
   if (sheet) sheet.classList.remove("is-fairy-nav");
   if (navView) navView.classList.add("hidden");
   if (returnToDetail && detailView && state.selectedPlaceId !== null) {
+    if (sheet) sheet.classList.remove("hidden");
     detailView.classList.remove("hidden");
   }
   currentFairyNavSession = null;
+  if (leafletMap) {
+    setTimeout(() => leafletMap.invalidateSize(), 60);
+  }
 }
 
 function animateFairyAlongRoute(coords, onComplete) {
@@ -2202,13 +2716,12 @@ function animateFairyAlongRoute(coords, onComplete) {
   }
   if (totalLen === 0) return;
 
-  const durationMs = 3400;
+  const durationMs = 3600;
   const startTime = performance.now();
 
   function stepFrame(now) {
     const elapsed = now - startTime;
     const progress = Math.min(1, elapsed / durationMs);
-    // 부드러운 easeInOutCubic
     const eased =
       progress < 0.5
         ? 4 * progress * progress * progress
@@ -2236,13 +2749,12 @@ function animateFairyAlongRoute(coords, onComplete) {
 
     const tagEl = document.getElementById("mapFairyRouteTag");
     if (tagEl && currentFairyNavSession) {
-      if (progress < 0.35) {
-        tagEl.textContent = currentFairyNavSession.route.steps[0].shortTag;
-      } else if (progress < 0.85) {
-        tagEl.textContent = currentFairyNavSession.route.steps[1].shortTag;
-      } else {
-        tagEl.textContent = currentFairyNavSession.route.steps[2].shortTag;
-      }
+      const steps = currentFairyNavSession.route.steps;
+      const idx = Math.min(
+        steps.length - 1,
+        Math.floor(progress * steps.length)
+      );
+      tagEl.textContent = steps[idx].shortTag;
     }
 
     if (progress < 1) {
@@ -2265,34 +2777,76 @@ function drawFairyRouteOnMap(routeData) {
   }
   fairyRouteLayerGroup = L.layerGroup().addTo(leafletMap);
 
-  // 1. 제미나이 오로라 외곽 광채 라인
+  // 1. 카카오/네이버 도보 네비 스타일 외곽 블루-바이올렛 글로우 라인
   L.polyline(routeData.coords, {
-    color: "#8B5CF6",
-    weight: 12,
+    color: "#6366F1",
+    weight: 13,
     opacity: 0.28,
     lineCap: "round",
     lineJoin: "round",
   }).addTo(fairyRouteLayerGroup);
 
-  // 2. 제미나이 블루-바이올렛 메인 경로 실선
+  // 2. 선명한 메인 경로 라인
   L.polyline(routeData.coords, {
-    color: "#4F46E5",
-    weight: 5,
-    opacity: 0.9,
+    color: "#2563EB",
+    weight: 6,
+    opacity: 0.94,
     lineCap: "round",
     lineJoin: "round",
   }).addTo(fairyRouteLayerGroup);
 
-  // 3. 위를 흐르는 화이트·핑크 점선 애니메이션
+  // 3. 진행 방향 화이트 점선 애니메이션
   L.polyline(routeData.coords, {
     color: "#FFFFFF",
     weight: 3,
-    opacity: 0.95,
-    dashArray: "8, 12",
+    opacity: 0.96,
+    dashArray: "7, 11",
     className: "fairy-route-animated-line",
   }).addTo(fairyRouteLayerGroup);
 
-  // 4. 지도 위를 날아가며 안내하는 3D 비행 요정 마커 (fairy-fly.webp)
+  // 4. 출발지(출발) 배지 마커 & 도착지(도착) 배지 마커 표시
+  const startCoord = routeData.coords[0];
+  const endCoord = routeData.coords[routeData.coords.length - 1];
+
+  const startBadgeIcon = L.divIcon({
+    className: "route-endpoint-marker",
+    html: `<div class="route-endpoint-pill is-start"><span>출발</span><strong>${escapeHtmlSafe(
+      routeData.origin.label
+    )}</strong></div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+  L.marker(startCoord, { icon: startBadgeIcon, zIndexOffset: 960 }).addTo(
+    fairyRouteLayerGroup
+  );
+
+  const endBadgeIcon = L.divIcon({
+    className: "route-endpoint-marker",
+    html: `<div class="route-endpoint-pill is-end"><span>도착</span><strong>${escapeHtmlSafe(
+      routeData.place.name
+    )}</strong></div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+  L.marker(endCoord, { icon: endBadgeIcon, zIndexOffset: 970 }).addTo(
+    fairyRouteLayerGroup
+  );
+
+  // 5. 경유 회전 지점 포인트 원 표시
+  routeData.steps.slice(1, -1).forEach((st, idx) => {
+    if (!st.coord) return;
+    L.circleMarker(st.coord, {
+      radius: 5,
+      color: "#1D4ED8",
+      weight: 2,
+      fillColor: "#FFFFFF",
+      fillOpacity: 1,
+    })
+      .bindTooltip(`${idx + 1}. ${st.turnLabel}`, { direction: "top" })
+      .addTo(fairyRouteLayerGroup);
+  });
+
+  // 6. 지도 위를 날아가며 안내하는 3D 비행 요정 마커 (fairy-fly.webp)
   const flyIcon = L.divIcon({
     className: "fairy-flying-route-marker",
     html: `
@@ -2329,21 +2883,43 @@ function drawFairyRouteOnMap(routeData) {
     }
   });
 
-  // 출발지와 도착지 카페가 지도 상단에 한눈에 들어오도록 카메라 맞춤
-  const bounds = L.latLngBounds(routeData.coords);
-  leafletMap.fitBounds(bounds, {
-    paddingTopLeft: [44, 54],
-    paddingBottomRight: [44, 290],
-    maxZoom: 17,
-    animate: true,
-  });
+  // 상단 HUD와 하단 길안내 시트 사이의 열린 지도 영역에 경로가 꽉 차게 카메라 맞춤
+  const fitRouteBounds = () => {
+    if (!leafletMap) return;
+    leafletMap.invalidateSize();
+    const bounds = L.latLngBounds(routeData.coords);
+    leafletMap.fitBounds(bounds, {
+      paddingTopLeft: [50, 124],
+      paddingBottomRight: [50, 420],
+      maxZoom: 17,
+      animate: false,
+    });
+  };
+
+  fitRouteBounds();
+  setTimeout(fitRouteBounds, 300);
 
   animateFairyAlongRoute(routeData.coords);
 }
 
+function selectFairyNavStep(nextIndex) {
+  if (!currentFairyNavSession) return;
+  const steps = currentFairyNavSession.route.steps;
+  if (nextIndex < 0 || nextIndex >= steps.length) return;
+  currentFairyNavSession.stepIndex = nextIndex;
+  const step = steps[nextIndex];
+  if (fairyFlyingMarker && step.coord) {
+    fairyFlyingMarker.setLatLng(step.coord);
+    const tagEl = document.getElementById("mapFairyRouteTag");
+    if (tagEl) tagEl.textContent = step.shortTag;
+  }
+  updateMapTurnByTurnHud();
+  renderFairyNavSheet();
+}
+
 function renderFairyNavSheet() {
   if (!currentFairyNavSession) return;
-  const { route, stepIndex, originMode } = currentFairyNavSession;
+  const { route, stepIndex, originMode, routeOption } = currentFairyNavSession;
   const { place, origin } = route;
   const curStep = route.steps[stepIndex] || route.steps[0];
 
@@ -2356,27 +2932,56 @@ function renderFairyNavSheet() {
   if (detailView) detailView.classList.add("hidden");
   navView.classList.remove("hidden");
 
-  const { naverUrl, kakaoUrl } = getPlaceExternalLinks(place);
+  updateMapTurnByTurnHud();
+
+  const { naverWalkUrl, kakaoWalkUrl } = getDirectExternalWalkLinks(
+    origin,
+    place
+  );
+
+  const stepListHtml = route.steps
+    .map((st, idx) => {
+      const isCurrent = idx === stepIndex;
+      const distBadge = st.distanceMeters > 0 ? `${st.distanceMeters}m` : "도착";
+      return `
+        <button
+          type="button"
+          class="nav-step-timeline-item ${isCurrent ? "is-active-step" : ""}"
+          data-nav-step-idx="${idx}"
+        >
+          <span class="nav-step-icon-circle">${getTurnIconSvg(st.turnType)}</span>
+          <div class="nav-step-text-col">
+            <div class="nav-step-title-row">
+              <span class="nav-step-turn-title">${st.badge} · ${st.turnLabel}</span>
+              <span class="nav-step-dist-pill">${distBadge}</span>
+            </div>
+            <p class="nav-step-desc">${st.instruction}</p>
+          </div>
+        </button>
+      `;
+    })
+    .join("");
 
   navView.innerHTML = `
+    <!-- 카카오맵·네이버지도 도보 길찾기 스타일 상단 요약 헤더 -->
     <div class="fairy-nav-header">
       <div class="fairy-nav-badge-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
         </svg>
-        <span>3D 요정 실시간 길안내</span>
+        <span>도보 길찾기 · 3D 요정 네비게이션</span>
       </div>
       <button type="button" class="fairy-nav-close-btn" id="btnCloseFairyNav" aria-label="길안내 종료하고 상세정보로 돌아가기">
         <span>← 상세정보로</span>
       </button>
     </div>
 
-    <div class="fairy-nav-route-summary">
-      <div class="fairy-nav-from-to">
-        <div class="fairy-nav-route-endpoints">${origin.label} → ${place.name}</div>
-        <div class="fairy-nav-route-metrics">
-          도보 약 ${route.durationMin}분 · ${route.distanceMeters}m · 약 ${route.stepsCount}걸음
-        </div>
+    <!-- 경로 옵션 탭 (추천경로 / 큰길우선 / 최단거리) + 출발지 전환 -->
+    <div class="nav-route-options-bar">
+      <div class="nav-route-type-tabs" role="tablist" aria-label="도보 경로 옵션">
+        <button type="button" class="nav-route-tab ${routeOption === "recommend" ? "is-active" : ""}" data-route-opt="recommend">추천경로</button>
+        <button type="button" class="nav-route-tab ${routeOption === "mainroad" ? "is-active" : ""}" data-route-opt="mainroad">큰길우선</button>
+        <button type="button" class="nav-route-tab ${routeOption === "shortest" ? "is-active" : ""}" data-route-opt="shortest">최단거리</button>
       </div>
       <div class="fairy-nav-origin-switch" role="group" aria-label="출발 위치 변경">
         <button
@@ -2396,29 +3001,31 @@ function renderFairyNavSheet() {
       </div>
     </div>
 
-    <div class="fairy-nav-stage-card">
+    <!-- 소요 시간 · 도착 예정 시각 · 거리 · 걸음수 · 칼로리 카드 (카카오/네이버 도보 요약 카드) -->
+    <div class="fairy-nav-route-summary">
+      <div class="fairy-nav-from-to">
+        <div class="nav-big-time-row">
+          <strong class="nav-big-duration">도보 ${route.durationMin}분</strong>
+          <span class="nav-eta-badge">${route.arrivalTimeLabel}</span>
+        </div>
+        <div class="fairy-nav-route-endpoints">${origin.label} → ${place.name}</div>
+        <div class="fairy-nav-route-metrics">
+          총 ${route.distanceMeters}m · 약 ${route.stepsCount}걸음 · ${route.calories}kcal · 횡단보도 ${route.crosswalkCount}회
+        </div>
+      </div>
       <div class="fairy-nav-mascot-wrap fairy-gemini-halo" id="navStageFairyTrigger" title="요정을 누르면 음성으로 안내해 줘요">
         <img
           src="./assets/fairy/fairy-fly.webp?v=20261102_6"
           alt="길안내 3D 요정"
           class="fairy-nav-mascot-img fairy-float"
           id="navStageFairyImg"
-          width="76"
-          height="70"
+          width="66"
+          height="60"
         />
-      </div>
-      <div class="fairy-nav-bubble">
-        <div class="fairy-nav-step-chip-row">
-          <span class="fairy-nav-step-badge">${curStep.badge} (${stepIndex + 1}/${route.steps.length})</span>
-          <button type="button" class="fairy-nav-voice-btn" id="btnSpeakFairyStep" aria-label="요정 음성으로 길안내 듣기">
-            <span>🔊 음성 안내</span>
-          </button>
-        </div>
-        <p class="fairy-nav-instruction-text">${curStep.instruction}</p>
-        <p class="fairy-nav-tip-text">${curStep.tip}</p>
       </div>
     </div>
 
+    <!-- 현재 구간 컨트롤 & 음성 안내 바 -->
     <div class="fairy-nav-controls-row">
       <button
         type="button"
@@ -2434,37 +3041,51 @@ function renderFairyNavSheet() {
         id="btnNextRouteStep"
         ${stepIndex >= route.steps.length - 1 ? "disabled" : ""}
       >
-        <span>다음 구간 ▶</span>
+        <span>다음 구간 안내 ▶</span>
       </button>
       <button
         type="button"
         class="fairy-step-ctrl-btn"
         id="btnReplayFairyFlight"
       >
-        <span>🔄 요정 다시 비행</span>
+        <span>🔄 요정 비행</span>
+      </button>
+      <button
+        type="button"
+        class="fairy-step-ctrl-btn"
+        id="btnSpeakFairyStep"
+        aria-label="요정 음성 안내 듣기"
+      >
+        <span>🔊 음성</span>
       </button>
     </div>
 
-    <div class="detail-ext-links">
+    <!-- 구간별 상세 턴바이턴(Turn-by-Turn) 타임라인 리스트 (누르면 해당 구간으로 이동) -->
+    <div class="nav-step-timeline-list" role="list" aria-label="구간별 도보 상세 경로">
+      ${stepListHtml}
+    </div>
+
+    <!-- 네이버지도 · 카카오맵 실제 길찾기 연동 버튼 -->
+    <div class="detail-ext-links" style="margin-top: 10px;">
       <a
-        href="${naverUrl}"
+        href="${naverWalkUrl}"
         target="_blank"
         rel="noopener noreferrer"
         class="ext-link-btn naver-btn"
-        aria-label="네이버 지도 앱에서 길찾기 및 후기 열기"
+        aria-label="네이버 지도에서 매장 위치 및 길찾기 열기"
       >
         <span class="ext-brand-dot naver" aria-hidden="true"></span>
-        <span>네이버 지도 · 후기</span>
+        <span>네이버 지도 길찾기 ↗</span>
       </a>
       <a
-        href="${kakaoUrl}"
+        href="${kakaoWalkUrl}"
         target="_blank"
         rel="noopener noreferrer"
         class="ext-link-btn kakao-btn"
-        aria-label="카카오맵에서 길찾기 및 후기 열기"
+        aria-label="카카오맵 도보 길찾기 바로 열기"
       >
         <span class="ext-brand-dot kakao" aria-hidden="true"></span>
-        <span>카카오맵 · 후기</span>
+        <span>카카오맵 도보 길찾기 ↗</span>
       </a>
     </div>
   `;
@@ -2476,37 +3097,55 @@ function renderFairyNavSheet() {
     });
   }
 
+  navView.querySelectorAll("[data-route-opt]").forEach((tabBtn) => {
+    tabBtn.addEventListener("click", () => {
+      const nextOpt = tabBtn.dataset.routeOpt || "recommend";
+      startFairyNavigation(place, originMode, nextOpt);
+    });
+  });
+
+  navView.querySelectorAll("[data-nav-step-idx]").forEach((stepBtn) => {
+    stepBtn.addEventListener("click", () => {
+      const idx = Number(stepBtn.dataset.navStepIdx);
+      selectFairyNavStep(idx);
+    });
+  });
+
   const btnOriginAnchor = document.getElementById("btnNavOriginAnchor");
   if (btnOriginAnchor) {
     btnOriginAnchor.addEventListener("click", () => {
-      startFairyNavigation(place, "anchor");
+      startFairyNavigation(place, "anchor", routeOption);
     });
   }
 
   const btnOriginGps = document.getElementById("btnNavOriginGps");
   if (btnOriginGps) {
     btnOriginGps.addEventListener("click", () => {
+      if (state.userGpsCoord && state.userGpsCoord.lat) {
+        startFairyNavigation(place, "gps", routeOption);
+        return;
+      }
       if (!navigator.geolocation) {
         showToast("이 브라우저에서는 GPS 위치 기능을 지원하지 않아요.");
         return;
       }
-      showToast("내 현재 위치(GPS)를 확인해 요정이 길을 다시 찾고 있어요...");
+      showToast("내 현재 위치(GPS)를 확인해 도보 경로를 다시 찾고 있어요...");
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           state.userGpsCoord = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-            label: "내 현재 위치",
+            label: "내 위치",
           };
-          startFairyNavigation(place, "gps");
+          startFairyNavigation(place, "gps", routeOption);
         },
         () => {
           showToast(
-            `위치 권한이 꺼져 있어 ${state.anchorCoord.label} 기준으로 안내할게요!`
+            `위치 권한이 꺼져 있어 ${state.anchorCoord.label} 출발 기준으로 안내할게요!`
           );
-          startFairyNavigation(place, "anchor");
+          startFairyNavigation(place, "anchor", routeOption);
         },
-        { enableHighAccuracy: true, timeout: 5000 }
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 }
       );
     });
   }
@@ -2514,39 +3153,14 @@ function renderFairyNavSheet() {
   const btnPrev = document.getElementById("btnPrevRouteStep");
   if (btnPrev) {
     btnPrev.addEventListener("click", () => {
-      if (currentFairyNavSession.stepIndex > 0) {
-        currentFairyNavSession.stepIndex -= 1;
-        const step =
-          currentFairyNavSession.route.steps[currentFairyNavSession.stepIndex];
-        if (fairyFlyingMarker && step.coord) {
-          fairyFlyingMarker.setLatLng(step.coord);
-          const tagEl = document.getElementById("mapFairyRouteTag");
-          if (tagEl) tagEl.textContent = step.shortTag;
-          if (leafletMap) leafletMap.panTo(step.coord, { animate: true });
-        }
-        renderFairyNavSheet();
-      }
+      selectFairyNavStep(currentFairyNavSession.stepIndex - 1);
     });
   }
 
   const btnNext = document.getElementById("btnNextRouteStep");
   if (btnNext) {
     btnNext.addEventListener("click", () => {
-      if (
-        currentFairyNavSession.stepIndex <
-        currentFairyNavSession.route.steps.length - 1
-      ) {
-        currentFairyNavSession.stepIndex += 1;
-        const step =
-          currentFairyNavSession.route.steps[currentFairyNavSession.stepIndex];
-        if (fairyFlyingMarker && step.coord) {
-          fairyFlyingMarker.setLatLng(step.coord);
-          const tagEl = document.getElementById("mapFairyRouteTag");
-          if (tagEl) tagEl.textContent = step.shortTag;
-          if (leafletMap) leafletMap.panTo(step.coord, { animate: true });
-        }
-        renderFairyNavSheet();
-      }
+      selectFairyNavStep(currentFairyNavSession.stepIndex + 1);
     });
   }
 
@@ -2571,37 +3185,54 @@ function renderFairyNavSheet() {
   if (navFairyTrigger) navFairyTrigger.addEventListener("click", handleSpeak);
 }
 
-async function startFairyNavigation(place, originMode = "anchor") {
+async function startFairyNavigation(
+  place,
+  originMode = "anchor",
+  routeOption = "recommend"
+) {
+  // 만약 카페가 다른 캠퍼스에 속해 있다면 해당 캠퍼스의 기준점(정문 등)을 출발지로 자동 매칭
+  const effectiveCampusAnchor =
+    place.campus !== state.campus && CAMPUS_ANCHORS[place.campus]
+      ? CAMPUS_ANCHORS[place.campus][0]
+      : state.anchorCoord;
+
   const origin =
     originMode === "gps" && state.userGpsCoord
       ? state.userGpsCoord
-      : state.anchorCoord;
+      : effectiveCampusAnchor;
 
-  // 3D 요정 길안내 시작 시 지도 탭으로 자동 전환하고 시트를 하단 절반 모드로 내려 지도가 보이게 함
+  // 3D 요정 길안내 시작 시 지도 탭으로 전환하되 closeDetail=false로 상세/네비 시트가 절대 닫히지 않게 유지!
+  document.body.classList.add("is-fairy-nav-mode");
   setMainViewMode("map", "fairy_nav", false);
   const sheet = document.getElementById("mainBottomSheet");
+  const detailView = document.getElementById("sheetDetailView");
+  const navView = document.getElementById("sheetFairyNavView");
   if (sheet) {
     sheet.classList.remove("hidden");
     sheet.classList.add("is-fairy-nav");
   }
+  if (detailView) detailView.classList.add("hidden");
+  if (navView) navView.classList.remove("hidden");
 
   trackEvent("start_fairy_navigation", {
     place_id: place.id,
     place_name: place.name,
     origin_mode: originMode,
+    route_option: routeOption,
   });
 
-  const route = await buildFairyWalkingRoute(origin, place);
+  const route = await buildFairyWalkingRoute(origin, place, routeOption);
   currentFairyNavSession = {
     route,
     stepIndex: 0,
     originMode,
+    routeOption,
   };
 
   drawFairyRouteOnMap(route);
   renderFairyNavSheet();
   showToast(
-    `🧚 3D 요정이 ${origin.label}에서 ${place.name}까지 길 안내를 시작했어요!`
+    `🧭 ${origin.label} → ${place.name} 도보 ${route.durationMin}분 길안내를 시작합니다!`
   );
 }
 
@@ -2636,7 +3267,7 @@ function initLeafletMapIfNeeded() {
   });
 
   leafletMap.on("click", () => {
-    if (state.selectedPlaceId !== null) {
+    if (state.selectedPlaceId !== null && !currentFairyNavSession) {
       closePlaceDetail();
     }
   });
@@ -2667,6 +3298,14 @@ function renderMapView(displayedPlaces) {
     leafletMap.removeLayer(anchorMarker);
     anchorMarker = null;
   }
+  if (userGpsMarker) {
+    leafletMap.removeLayer(userGpsMarker);
+    userGpsMarker = null;
+  }
+  if (gpsAccuracyCircle) {
+    leafletMap.removeLayer(gpsAccuracyCircle);
+    gpsAccuracyCircle = null;
+  }
   placeMarkersLayer.clearLayers();
   markerElementsById.clear();
 
@@ -2684,22 +3323,28 @@ function renderMapView(displayedPlaces) {
   }
 
   // 기준점 마커: 흰 원 안에 가두지 않고 뒤에 은은한 흰빛·파란빛과 함께 지도 위에 떠 있는 3D 요정
+  const isGpsAnchor = state.anchorKey === "gps";
+  const anchorBadgeHtml = isGpsAnchor
+    ? `<span class="fairy-gps-live-badge"><span class="gps-pulse-dot"></span>내 위치 요정</span>`
+    : `<span class="fairy-anchor-label-badge">${state.anchorCoord.label}</span>`;
+
   const anchorIcon = L.divIcon({
     className: "fairy-anchor-marker",
     html: `
-      <div class="fairy-anchor-ring fairy-float" id="mapFairyAnchorRing" title="${state.anchorCoord.label} 기준점 (눌러서 중심 맞추기)">
+      <div class="fairy-anchor-ring fairy-float ${isGpsAnchor ? "is-gps-fairy" : ""}" id="mapFairyAnchorRing" title="${state.anchorCoord.label} 기준점 (눌러서 중심 맞추기)">
+        ${anchorBadgeHtml}
         <div class="fairy-anchor-inner">
           <img src="./assets/fairy/fairy-wave.webp?v=20261102_6" alt="${state.anchorCoord.label} 기준점" width="66" height="70" />
         </div>
       </div>
     `,
-    iconSize: [72, 76],
-    iconAnchor: [36, 38],
+    iconSize: [80, 92],
+    iconAnchor: [40, 48],
   });
 
   anchorMarker = L.marker([state.anchorCoord.lat, state.anchorCoord.lng], {
     icon: anchorIcon,
-    zIndexOffset: 150,
+    zIndexOffset: isGpsAnchor ? 920 : 150,
   }).addTo(leafletMap);
 
   anchorMarker.on("click", (e) => {
@@ -2714,6 +3359,54 @@ function renderMapView(displayedPlaces) {
     const cheerMsg = cycleFairyCheerMessage(ringEl);
     showToast(`${state.anchorCoord.label} 요정: "${cheerMsg}"`);
   });
+
+  // 만약 내 위치(GPS)가 파악되어 있는데 현재 선택된 기준점이 정문/후문 등 다른 곳이라면, 내 위치에도 3D 요정을 함께 띄워줌
+  if (state.userGpsCoord && state.anchorKey !== "gps") {
+    const gpsFairyIcon = L.divIcon({
+      className: "fairy-anchor-marker",
+      html: `
+        <div class="fairy-anchor-ring fairy-float is-gps-fairy" id="mapUserGpsFairyRing" title="내 현재 위치 (누르면 내 위치 기준으로 전환)">
+          <span class="fairy-gps-live-badge"><span class="gps-pulse-dot"></span>내 위치</span>
+          <div class="fairy-anchor-inner">
+            <img src="./assets/fairy/fairy-fly.webp?v=20261102_6" alt="내 현재 위치 요정" width="60" height="56" />
+          </div>
+        </div>
+      `,
+      iconSize: [74, 84],
+      iconAnchor: [37, 42],
+    });
+
+    userGpsMarker = L.marker([state.userGpsCoord.lat, state.userGpsCoord.lng], {
+      icon: gpsFairyIcon,
+      zIndexOffset: 900,
+    }).addTo(leafletMap);
+
+    userGpsMarker.on("click", (e) => {
+      L.DomEvent.stopPropagation(e);
+      state.anchorKey = "gps";
+      state.anchorCoord = {
+        lat: state.userGpsCoord.lat,
+        lng: state.userGpsCoord.lng,
+        label: "내 위치",
+      };
+      renderAll(true);
+      showToast("🧚 내 현재 위치를 기준으로 주변 카페 거리를 다시 계산했어요!");
+    });
+  }
+
+  // 내 위치(GPS) 반경 오차 원 표시
+  const activeGps =
+    state.anchorKey === "gps" ? state.anchorCoord : state.userGpsCoord;
+  if (activeGps && activeGps.lat && activeGps.lng) {
+    gpsAccuracyCircle = L.circle([activeGps.lat, activeGps.lng], {
+      radius: Math.min(Math.max(activeGps.accuracy || 35, 18), 90),
+      color: "#3B82F6",
+      weight: 1.5,
+      opacity: 0.55,
+      fillColor: "#60A5FA",
+      fillOpacity: 0.14,
+    }).addTo(leafletMap);
+  }
 
   const cupSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 1 1 0 8h-1"></path><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path></svg>`;
 
@@ -3010,37 +3703,149 @@ function setLoadingState(visible, message = "자리 알아보는 중…") {
   pill.classList.toggle("hidden", !visible);
 }
 
-function requestUserGPS() {
+function applyGpsPosition(pos, recenter = true, silent = false) {
+  setLoadingState(false);
+  const lat = pos.coords.latitude;
+  const lng = pos.coords.longitude;
+  const accuracy = pos.coords.accuracy || 30;
+
+  state.userGpsCoord = {
+    lat,
+    lng,
+    accuracy,
+    label: "내 위치",
+  };
+
+  // 내 위치가 서울캠과 국제캠 중 어디에 더 가까운지 자동 판별하여 캠퍼스 동기화 (반경 8km 이내일 때)
+  const distSeoul = getDistanceMeters(
+    lat,
+    lng,
+    CAMPUS_ANCHORS.seoul[0].lat,
+    CAMPUS_ANCHORS.seoul[0].lng
+  );
+  const distGlobal = getDistanceMeters(
+    lat,
+    lng,
+    CAMPUS_ANCHORS.global[0].lat,
+    CAMPUS_ANCHORS.global[0].lng
+  );
+  if (distGlobal < distSeoul && distGlobal <= 8000 && state.campus !== "global") {
+    state.campus = "global";
+  } else if (distSeoul < distGlobal && distSeoul <= 8000 && state.campus !== "seoul") {
+    state.campus = "seoul";
+  }
+
+  state.anchorKey = "gps";
+  state.anchorCoord = {
+    lat,
+    lng,
+    accuracy,
+    label: "내 위치",
+  };
+
+  // 만약 내 위치가 캠퍼스에서 1km보다 멀어도 카페 목록이 0개로 비지 않도록 전체 반경(0)으로 자동 유지
+  const nearestAnchorDist = Math.min(distSeoul, distGlobal);
+  if (state.radiusMeters > 0 && nearestAnchorDist > state.radiusMeters) {
+    state.radiusMeters = 0;
+  }
+
+  const btnMyLoc = document.getElementById("btnMapMyLocation");
+  if (btnMyLoc) {
+    btnMyLoc.classList.add("is-gps-active");
+  }
+
+  renderAll(recenter);
+  if (!silent) {
+    showToast("🧚 내 현재 위치를 파악해 요정이 내 위치로 날아왔어요!");
+  }
+}
+
+function startContinuousGpsWatch() {
+  if (!navigator.geolocation || gpsWatchId !== null) return;
+  try {
+    gpsWatchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const prev = state.userGpsCoord;
+        state.userGpsCoord = {
+          lat,
+          lng,
+          accuracy: pos.coords.accuracy || 30,
+          label: "내 위치",
+        };
+        if (state.anchorKey === "gps") {
+          state.anchorCoord = { ...state.userGpsCoord };
+        }
+        // 15m 이상 이동했을 때만 지도 마커/거리 갱신
+        if (!prev || getDistanceMeters(prev.lat, prev.lng, lat, lng) >= 15) {
+          renderAll(false);
+        }
+      },
+      () => {},
+      { enableHighAccuracy: false, maximumAge: 60000, timeout: 15000 }
+    );
+  } catch (_e) {}
+}
+
+function requestUserGPS(silent = false) {
   if (!navigator.geolocation) {
-    showToast("이 브라우저에서는 위치 기능을 지원하지 않아요.");
+    if (!silent) {
+      showToast("이 브라우저에서는 위치 기능을 지원하지 않아요.");
+    }
     return;
   }
 
-  setLoadingState(true, "자리 알아보는 중…");
+  // 이미 최근 파악된 GPS 좌표가 있으면 즉시 먼저 요정을 이동시켜 체감 지연 0초 제공
+  if (state.userGpsCoord && state.userGpsCoord.lat) {
+    state.anchorKey = "gps";
+    state.anchorCoord = { ...state.userGpsCoord };
+    renderAll(true);
+  } else if (!silent) {
+    setLoadingState(true, "내 위치 찾는 중…");
+  }
+
+  // 1차 시도: 빠른 응답을 위해 캐시 허용(maximumAge: 120초) + 넉넉한 타임아웃(10초)
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      setLoadingState(false);
-      state.anchorKey = "gps";
-      state.anchorCoord = {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        label: "내 위치",
-      };
-      renderAll(true);
+      applyGpsPosition(pos, true, silent);
+      startContinuousGpsWatch();
     },
     () => {
-      setLoadingState(false);
-      const fallback = CAMPUS_ANCHORS[state.campus][0];
-      state.anchorKey = fallback.key;
-      state.anchorCoord = {
-        lat: fallback.lat,
-        lng: fallback.lng,
-        label: fallback.label,
-      };
-      showToast("위치 권한이 꺼져 있어 정문 기준으로 보여드려요.");
-      renderAll(true);
+      // 2차 재시도: 고정밀(enableHighAccuracy: true)이 실내/Wi-Fi에서 타임아웃될 때 일반 네트워크/Wi-Fi 측위로 즉시 폴백
+      navigator.geolocation.getCurrentPosition(
+        (pos2) => {
+          applyGpsPosition(pos2, true, silent);
+          startContinuousGpsWatch();
+        },
+        (err2) => {
+          setLoadingState(false);
+          if (state.userGpsCoord && state.userGpsCoord.lat) {
+            state.anchorKey = "gps";
+            state.anchorCoord = { ...state.userGpsCoord };
+            renderAll(true);
+            return;
+          }
+          const fallback = CAMPUS_ANCHORS[state.campus][0];
+          state.anchorKey = fallback.key;
+          state.anchorCoord = {
+            lat: fallback.lat,
+            lng: fallback.lng,
+            label: fallback.label,
+          };
+          if (!silent) {
+            const msg =
+              err2 && err2.code === 1
+                ? "브라우저 주소창 왼쪽에서 위치 권한을 '허용'해 주시면 내 위치에 요정이 나타나요!"
+                : "실내 GPS 신호가 약해 현재 캠퍼스 정문 기준으로 요정이 안내해 드려요.";
+            showToast(msg);
+          }
+          renderAll(true);
+        },
+        { enableHighAccuracy: false, timeout: 12000, maximumAge: 600000 }
+      );
     },
-    { enableHighAccuracy: true, timeout: 6000 }
+    { enableHighAccuracy: true, timeout: 7000, maximumAge: 120000 }
   );
 }
 
@@ -3187,10 +3992,13 @@ function renderAll(recenterMap = false) {
   renderControlsAndGreeting(displayedPlaces, refDate);
   updateMoodCardsInPlace(refDate);
   updateDetailChipsInPlace(refDate);
+  renderAiPromptResultBox(refDate);
   renderPlaceList(displayedPlaces);
   renderMapView(displayedPlaces);
 
-  if (state.selectedPlaceId !== null) {
+  if (currentFairyNavSession) {
+    updateMapTurnByTurnHud();
+  } else if (state.selectedPlaceId !== null) {
     openPlaceDetail(state.selectedPlaceId, false);
   }
 
@@ -3198,11 +4006,11 @@ function renderAll(recenterMap = false) {
     setTimeout(() => {
       leafletMap.invalidateSize();
       const targetZoom =
-        state.radiusMeters === 300 || state.radiusMeters === 500
+        state.anchorKey === "gps"
           ? 16
-          : state.radiusMeters === 1000
-          ? 15
-          : 14;
+          : state.radiusMeters === 300 || state.radiusMeters === 500
+          ? 16
+          : 15;
       leafletMap.setView([state.anchorCoord.lat, state.anchorCoord.lng], targetZoom);
       syncMapZoomClass();
     }, 50);
@@ -3896,6 +4704,37 @@ function bindEvents() {
       showToast(`✨ '${cafeName}' 카페가 지도에 바로 추가되고 건의 내용이 복사되었어요!`);
     });
   }
+
+  // 20-4. ✨ AI 프롬프트 카페 추천 입력 폼 & 지우기 버튼 바인딩
+  const aiPromptForm = document.getElementById("aiPromptForm");
+  const aiPromptInput = document.getElementById("aiPromptInput");
+  const btnClearAiPrompt = document.getElementById("btnClearAiPrompt");
+
+  if (aiPromptForm && aiPromptInput) {
+    aiPromptForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const val = aiPromptInput.value.trim();
+      if (!val) {
+        showToast("원하는 카공 조건을 문장으로 입력해 보세요! (예: 조용하고 콘센트 많은 곳)");
+        aiPromptInput.focus();
+        return;
+      }
+      applyAiPromptRecommendation(val, false);
+    });
+
+    aiPromptInput.addEventListener("input", () => {
+      if (btnClearAiPrompt) {
+        btnClearAiPrompt.classList.toggle("hidden", !aiPromptInput.value.trim());
+      }
+    });
+  }
+
+  if (btnClearAiPrompt && aiPromptInput) {
+    btnClearAiPrompt.addEventListener("click", () => {
+      aiPromptInput.value = "";
+      applyAiPromptRecommendation("", false);
+    });
+  }
 }
 
 // 23. 앱 초기화 및 1분 주기 영업시간 상태 갱신
@@ -3917,7 +4756,28 @@ async function initApp() {
     setLoadingState(false);
   }
 
-  renderAll(true);
+  // URL에 ?q=... 또는 ?prompt=... 추천 프롬프트가 담겨 공유된 경우 자동 추천 실행!
+  if (state.aiPromptQuery) {
+    applyAiPromptRecommendation(state.aiPromptQuery, true);
+  } else {
+    renderAll(true);
+  }
+
+  // URL에 ?anchor=gps가 지정되었거나 브라우저에 이미 위치 권한이 허용('granted')된 경우 자동으로 내 위치를 파악해 요정을 내 위치에 띄움
+  if (state.anchorKey === "gps") {
+    requestUserGPS(false);
+  } else if (navigator.permissions && navigator.permissions.query) {
+    try {
+      navigator.permissions
+        .query({ name: "geolocation" })
+        .then((perm) => {
+          if (perm.state === "granted") {
+            requestUserGPS(true);
+          }
+        })
+        .catch(() => {});
+    } catch (_e) {}
+  }
 
   const params = new URLSearchParams(window.location.search);
   const initialPlaceId = Number(params.get("place"));
