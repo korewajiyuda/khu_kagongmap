@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://korewajiyuda.github.io/khu_kagongmap/assets/fairy/og-image.png" />
 
   <!-- 파비콘 (요정 얼굴 아이콘) -->
-  <link rel="icon" type="image/webp" href="./assets/fairy/fairy-head-pin.webp?v=20261102_3" />
+  <link rel="icon" type="image/webp" href="./assets/fairy/fairy-head-pin.webp?v=20261102_6" />
 
   <!-- Pretendard Dynamic Subset Webfont -->
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
@@ -33,22 +33,27 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
   <!-- App Stylesheet -->
-  <link rel="stylesheet" href="./style.css?v=20261102_3" />
+  <link rel="stylesheet" href="./style.css?v=20261102_6" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
-    <!-- 5-1. 상단 헤더 1줄 (왼쪽: 큼직한 3D 요정 + 경희대 카공맵 / 오른쪽: 캠퍼스 세그먼트 + 메뉴 버튼) -->
+    <!-- 5-1. 상단 헤더 1줄 (왼쪽: 은은한 파란 후광 3D 요정 + 경희대 카공맵 with Gemini / 오른쪽: 캠퍼스 세그먼트 + 메뉴) -->
     <header class="top-header" role="banner">
       <div class="brand-group" id="brandFairyTrigger" role="button" tabindex="0" aria-label="요정 마스코트 인사 보기">
-        <img
-          src="./assets/fairy/fairy-wave.webp?v=20261102_3"
-          alt="경희대 카공맵 요정 마스코트"
-          class="brand-fairy-icon fairy-float"
-          id="headerFairyImg"
-          width="44"
-          height="44"
-        />
-        <h1 class="brand-title">경희대 카공맵</h1>
+        <div class="fairy-gemini-halo header-fairy-halo">
+          <img
+            src="./assets/fairy/fairy-wave.webp?v=20261102_6"
+            alt="경희대 카공맵 요정 마스코트"
+            class="brand-fairy-icon fairy-float"
+            id="headerFairyImg"
+            width="42"
+            height="42"
+          />
+        </div>
+        <h1 class="brand-title">
+          <span>경희대 카공맵</span>
+          <span class="brand-with-gemini">with Gemini</span>
+        </h1>
       </div>
 
       <div class="header-actions">
@@ -129,7 +134,7 @@
 
       <!-- 로딩 오버레이 (fairy-fly.webp + "자리 알아보는 중…") -->
       <div class="map-loading-pill hidden" id="loadingIndicator" role="status" aria-live="polite">
-        <img src="./assets/fairy/fairy-fly.webp?v=20261102_3" alt="" class="loading-fairy fairy-float" width="46" height="42" />
+        <img src="./assets/fairy/fairy-fly.webp?v=20261102_4" alt="" class="loading-fairy fairy-float" width="46" height="42" />
         <span id="loadingText">자리 알아보는 중…</span>
       </div>
 
@@ -175,16 +180,16 @@
 
       <!-- 시트 내부 뷰 1: 목록 및 상황 탐색 뷰 -->
       <div class="sheet-list-view" id="sheetListView">
-        <!-- 첫 진입 3D 팝아웃 요정 삼총사 인사 바 + 내일 아침/오후/밤 1탭 빠른 시간 선택 -->
+        <!-- 첫 진입 3D 팝아웃 요정 삼총사 인사 바 (뒤에 은은한 파란빛 후광 적용) -->
         <div class="fairy-greeting-bar" id="fairyGreetingBar">
           <button
             type="button"
-            class="greeting-fairy-btn"
+            class="greeting-fairy-btn fairy-gemini-halo"
             id="btnFairyCheer"
             aria-label="요정 삼총사 눌러서 응원 메시지 보기"
           >
             <img
-              src="./assets/fairy/fairy-trio.webp?v=20261102_3"
+              src="./assets/fairy/fairy-trio.webp?v=20261102_6"
               alt="요정 삼총사"
               class="greeting-fairy-img fairy-float"
               id="greetingFairyImg"
@@ -194,7 +199,7 @@
           </button>
           <div class="greeting-content-col">
             <div class="greeting-text-wrap" id="greetingTextTrigger" role="button" tabindex="0" aria-label="다른 응원 문구 보기">
-              <p class="greeting-text" id="greetingText">새벽이네요! 내일 아침 갈 카페를 미리 찾아볼까요?</p>
+              <p class="greeting-text" id="greetingText">오늘은 어디서 공부할까요?</p>
             </div>
             <div class="fairy-quick-time-row" id="fairyQuickTimeRow" role="group" aria-label="방문 시간대 빠른 선택">
               <button type="button" class="fairy-time-pill is-active" data-quick-time="now">지금</button>
@@ -212,16 +217,32 @@
           </button>
         </div>
 
-        <!-- 4-1 & 4-2. 상황 카드 가로 스크롤 줄 + 세부 조건 버튼 (우측 페이드 그라데이션 적용) -->
-        <div class="mood-scroll-wrapper">
-          <div class="mood-rail" id="moodRail" role="region" aria-label="상황별 카페 찾기">
+        <!-- 4-1 & 4-2. 「오늘의 카공 카드 선택」 / 「카페 세부 조건 선택」 2분할 탭 -->
+        <div class="filter-section-container">
+          <div class="filter-category-tabs" role="tablist" aria-label="카공 탐색 방식 선택">
             <button
               type="button"
-              class="detail-filter-trigger"
-              id="btnOpenDetailFilter"
-              aria-label="세부 조건 선택 열기"
+              class="filter-cat-tab is-active"
+              id="tabMoodCards"
+              data-filter-tab="mood"
+              role="tab"
+              aria-selected="true"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"></path>
+              </svg>
+              <span id="tabMoodCardsLabel">오늘의 카공 카드 선택</span>
+            </button>
+
+            <button
+              type="button"
+              class="filter-cat-tab"
+              id="btnOpenDetailFilter"
+              data-filter-tab="detail"
+              role="tab"
+              aria-selected="false"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <line x1="4" y1="21" x2="4" y2="14"></line>
                 <line x1="4" y1="10" x2="4" y2="3"></line>
                 <line x1="12" y1="21" x2="12" y2="12"></line>
@@ -232,13 +253,23 @@
                 <line x1="9" y1="8" x2="15" y2="8"></line>
                 <line x1="17" y1="16" x2="23" y2="16"></line>
               </svg>
-              <span class="detail-btn-label" id="detailFilterBtnLabel">세부 조건</span>
+              <span class="detail-btn-label" id="detailFilterBtnLabel">카페 세부 조건 선택</span>
             </button>
-
-            <!-- 8개 상황 카드 (고정 폭, 클릭 시 레이아웃 이동 0px) -->
-            <div class="mood-cards-track" id="moodCardsTrack" role="radiogroup" aria-label="상황 카드 목록"></div>
           </div>
-          <div class="scroll-fade-right" aria-hidden="true"></div>
+
+          <!-- 패널 1: 오늘의 카공 카드 선택 (적당히 떠들면서~, 진짜 밤늦게까지~ 등 8개 카드) -->
+          <div class="mood-scroll-wrapper" id="moodCardsPanel">
+            <div class="mood-rail" id="moodRail" role="region" aria-label="오늘의 카공 카드 목록">
+              <div class="mood-cards-track" id="moodCardsTrack" role="radiogroup" aria-label="상황 카드 목록"></div>
+            </div>
+            <div class="scroll-fade-right" aria-hidden="true"></div>
+          </div>
+
+          <!-- 패널 2: 카페 세부 조건 선택 (콘센트 많음, 조용한, 1인석, 교내 카페, 24시간 인라인 선택) -->
+          <div class="inline-detail-panel hidden" id="inlineDetailPanel" role="region" aria-label="카페 세부 조건 선택">
+            <div class="inline-detail-track" id="inlineDetailTrack"></div>
+            <button type="button" class="inline-detail-reset-btn hidden" id="btnInlineDetailReset">초기화</button>
+          </div>
         </div>
 
         <!-- 5-1 & 3-2. 결과 요약 + 기준점 드롭다운 + 반경 드롭다운 + 방문 시각 + 영업 중만 토글 -->
@@ -314,16 +345,18 @@
         <!-- 5-3. 카페 목록 스크롤 컨테이너 (카드 높이 96~110px) -->
         <div class="sheet-scroll-body" id="sheetScrollBody">
           <div class="place-card-list" id="placeListContainer" role="list"></div>
+        </div>
 
-          <!-- 5-4. 목록 맨 아래의 얇은 Google AI Pro 학생 혜택 배너 1개 -->
+        <!-- 5-4. 시트 맨 아래(하단) 고정 Google AI Pro 학생 무료 혜택 바 -->
+        <div class="bottom-fixed-offer-wrap">
           <div class="subtle-offer-banner" id="subtleOfferBanner">
             <div class="subtle-offer-info">
               <span class="subtle-offer-title">경희대생 Google AI Pro 1년 무료 혜택</span>
               <span class="subtle-offer-desc">학교 이메일 인증 방법 및 오류 해결 가이드</span>
             </div>
             <button type="button" class="subtle-offer-btn" id="btnOpenOfferFromList" aria-label="Google AI Pro 학생 혜택 안내 열기">
-              <span>자세히</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <span>AI Pro 무료혜택</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <polyline points="9 18 15 12 9 6"></polyline>
               </svg>
             </button>
@@ -333,6 +366,9 @@
 
       <!-- 시트 내부 뷰 2: 카페 상세 뷰 (카드나 마커 클릭 시 전환) -->
       <div class="sheet-detail-view hidden" id="sheetDetailView" aria-live="polite"></div>
+
+      <!-- 시트 내부 뷰 3: 3D 요정 길안내 모드 뷰 -->
+      <div class="sheet-fairy-nav-view hidden" id="sheetFairyNavView" aria-live="polite"></div>
     </section>
 
     <!-- 4-2. 세부 조건 선택 모달 시트 (AND 다중 선택 + 각 조건 옆에 남는 개수 미리보기) -->
@@ -499,7 +535,7 @@
 
   <!-- Leaflet 1.9.4 & Hours Engine & App Logic -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="./hours.js?v=20261102_3"></script>
-  <script src="./app.js?v=20261102_3"></script>
+  <script src="./hours.js?v=20261102_8"></script>
+  <script src="./app.js?v=20261102_8"></script>
 </body>
 </html>
