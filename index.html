@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
   <!-- App Stylesheet -->
-  <link rel="stylesheet" href="./style.css?v=20261102_6" />
+  <link rel="stylesheet" href="./style.css?v=20261102_9" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -116,6 +116,14 @@
                 <line x1="12" y1="18" x2="12.01" y2="18"></line>
               </svg>
               <span>홈 화면에 추가</span>
+            </button>
+            <button type="button" class="menu-item-btn" id="btnMenuSuggestCafe" role="menuitem" aria-label="새 카공 카페 건의하기">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="16"></line>
+                <line x1="8" y1="12" x2="16" y2="12"></line>
+              </svg>
+              <span>새 카페 건의하기</span>
             </button>
             <button type="button" class="menu-item-btn" id="btnMenuOffer" role="menuitem" aria-label="Google AI Pro 학생 혜택 안내 보기">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -204,7 +212,7 @@
             <div class="fairy-quick-time-row" id="fairyQuickTimeRow" role="group" aria-label="방문 시간대 빠른 선택">
               <button type="button" class="fairy-time-pill is-active" data-quick-time="now">지금</button>
               <button type="button" class="fairy-time-pill" data-quick-time="morning09">내일 아침 9시</button>
-              <button type="button" class="fairy-time-pill" data-quick-time="afternoon14">낮 2시</button>
+              <button type="button" class="fairy-time-pill" data-quick-time="afternoon14">오후 2시</button>
               <button type="button" class="fairy-time-pill" data-quick-time="tonight22">밤 10시</button>
               <button type="button" class="fairy-time-pill" data-quick-time="all_places">닫은 곳도 보기</button>
             </div>
@@ -217,16 +225,16 @@
           </button>
         </div>
 
-        <!-- 4-1 & 4-2. 「오늘의 카공 카드 선택」 / 「카페 세부 조건 선택」 2분할 탭 -->
+        <!-- 4-1 & 4-2. 「오늘의 카공 카드 선택」 / 「카페 세부 조건 선택」 2분할 탭 (둘 중 하나만 선택 가능, 안 누르면 아래 서랍 숨김) -->
         <div class="filter-section-container">
           <div class="filter-category-tabs" role="tablist" aria-label="카공 탐색 방식 선택">
             <button
               type="button"
-              class="filter-cat-tab is-active"
+              class="filter-cat-tab"
               id="tabMoodCards"
               data-filter-tab="mood"
               role="tab"
-              aria-selected="true"
+              aria-selected="false"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"></path>
@@ -257,15 +265,15 @@
             </button>
           </div>
 
-          <!-- 패널 1: 오늘의 카공 카드 선택 (적당히 떠들면서~, 진짜 밤늦게까지~ 등 8개 카드) -->
-          <div class="mood-scroll-wrapper" id="moodCardsPanel">
+          <!-- 패널 1: 오늘의 카공 카드 선택 (기본 숨김, 탭 클릭 시에만 열림) -->
+          <div class="mood-scroll-wrapper hidden" id="moodCardsPanel">
             <div class="mood-rail" id="moodRail" role="region" aria-label="오늘의 카공 카드 목록">
               <div class="mood-cards-track" id="moodCardsTrack" role="radiogroup" aria-label="상황 카드 목록"></div>
             </div>
             <div class="scroll-fade-right" aria-hidden="true"></div>
           </div>
 
-          <!-- 패널 2: 카페 세부 조건 선택 (콘센트 많음, 조용한, 1인석, 교내 카페, 24시간 인라인 선택) -->
+          <!-- 패널 2: 카페 세부 조건 선택 (기본 숨김, 탭 클릭 시에만 열림) -->
           <div class="inline-detail-panel hidden" id="inlineDetailPanel" role="region" aria-label="카페 세부 조건 선택">
             <div class="inline-detail-track" id="inlineDetailTrack"></div>
             <button type="button" class="inline-detail-reset-btn hidden" id="btnInlineDetailReset">초기화</button>
@@ -286,12 +294,12 @@
               </svg>
             </label>
 
-            <!-- 반경 드롭다운 (500m ▾ : 300m / 500m / 1km / 전체) -->
+            <!-- 반경 드롭다운 (1km ▾ : 300m / 500m / 1km / 전체) -->
             <label class="inline-select-wrap" for="selectRadius">
               <select id="selectRadius" class="clean-select" aria-label="탐색 반경 선택">
                 <option value="300">300m</option>
-                <option value="500" selected>500m</option>
-                <option value="1000">1km</option>
+                <option value="500">500m</option>
+                <option value="1000" selected>1km</option>
                 <option value="0">전체</option>
               </select>
               <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -310,7 +318,7 @@
               <select id="selectVisitTime" class="clean-select" aria-label="방문 예정 시각 선택">
                 <option value="now" selected>지금</option>
                 <option value="morning09">아침 9시</option>
-                <option value="afternoon14">낮 2시</option>
+                <option value="afternoon14">오후 2시</option>
                 <option value="tonight22">오늘 밤 10시</option>
                 <option value="custom">직접 선택</option>
               </select>
@@ -347,19 +355,24 @@
           <div class="place-card-list" id="placeListContainer" role="list"></div>
         </div>
 
-        <!-- 5-4. 시트 맨 아래(하단) 고정 Google AI Pro 학생 무료 혜택 바 -->
+        <!-- 5-4. 시트 맨 아래(하단) 고정: 카페 건의·후기 버튼 + Google AI Pro 학생 무료 혜택 바 -->
         <div class="bottom-fixed-offer-wrap">
           <div class="subtle-offer-banner" id="subtleOfferBanner">
             <div class="subtle-offer-info">
               <span class="subtle-offer-title">경희대생 Google AI Pro 1년 무료 혜택</span>
-              <span class="subtle-offer-desc">학교 이메일 인증 방법 및 오류 해결 가이드</span>
+              <span class="subtle-offer-desc">학교 이메일 인증 가이드 · 나만의 카공 카페 제보</span>
             </div>
-            <button type="button" class="subtle-offer-btn" id="btnOpenOfferFromList" aria-label="Google AI Pro 학생 혜택 안내 열기">
-              <span>AI Pro 무료혜택</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="9 18 15 12 9 6"></polyline>
-              </svg>
-            </button>
+            <div class="bottom-banner-actions">
+              <button type="button" class="suggest-cafe-pill-btn" id="btnOpenSuggestCafe" aria-label="새 카공 카페 건의하기 또는 후기 남기기">
+                <span>+ 카페 건의</span>
+              </button>
+              <button type="button" class="subtle-offer-btn" id="btnOpenOfferFromList" aria-label="Google AI Pro 학생 혜택 안내 열기">
+                <span>AI Pro 무료혜택</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -529,13 +542,79 @@
       </div>
     </div>
 
+    <!-- 새 카공 카페 건의하기 & 후기 남기기 모달 -->
+    <div class="modal-backdrop hidden" id="suggestCafeModal" role="dialog" aria-modal="true" aria-labelledby="suggestCafeModalTitle">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h2 class="modal-title" id="suggestCafeModalTitle">새 카공 카페 건의 · 후기 남기기</h2>
+          <button type="button" class="icon-btn" id="btnCloseSuggestModal" aria-label="건의 모달 닫기">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <p class="modal-subtitle">나만 아는 카공 명소나 생생한 후기를 남겨주시면 지도에 바로 반영돼요!</p>
+
+        <div class="suggest-form-group">
+          <label class="suggest-field-label">캠퍼스 선택</label>
+          <div class="suggest-campus-row" id="suggestCampusRow">
+            <button type="button" class="detail-cond-chip is-selected" data-suggest-campus="seoul">서울캠 (회기·외대)</button>
+            <button type="button" class="detail-cond-chip" data-suggest-campus="global">국제캠 (영통·서천)</button>
+          </div>
+        </div>
+
+        <div class="suggest-form-group">
+          <label class="suggest-field-label" for="suggestCafeNameInput">카페 이름</label>
+          <input
+            type="text"
+            id="suggestCafeNameInput"
+            class="suggest-text-input"
+            placeholder="예: 카페 칸나, 하삼동커피, 8번가 등"
+          />
+        </div>
+
+        <div class="suggest-form-group">
+          <label class="suggest-field-label">카공 특징 태그 (중복 선택 가능)</label>
+          <div class="suggest-tag-grid" id="suggestTagGrid">
+            <button type="button" class="detail-cond-chip is-selected" data-suggest-tag="콘센트많음">콘센트 많음</button>
+            <button type="button" class="detail-cond-chip" data-suggest-tag="조용한">조용한</button>
+            <button type="button" class="detail-cond-chip" data-suggest-tag="밤늦게까지">밤늦게까지</button>
+            <button type="button" class="detail-cond-chip" data-suggest-tag="1인석">1인석</button>
+            <button type="button" class="detail-cond-chip" data-suggest-tag="대화가능">대화 가능</button>
+            <button type="button" class="detail-cond-chip" data-suggest-tag="분위기좋음">분위기 좋음</button>
+            <button type="button" class="detail-cond-chip" data-suggest-tag="저가">가성비</button>
+          </div>
+        </div>
+
+        <div class="suggest-form-group">
+          <label class="suggest-field-label" for="suggestReviewInput">한줄 추천 이유 / 카공 후기</label>
+          <textarea
+            id="suggestReviewInput"
+            class="report-textarea"
+            rows="3"
+            placeholder="예: 창가 자리에 콘센트가 다 있고 밤 10시 반까지 해서 과제하기 정말 좋아요!"
+          ></textarea>
+        </div>
+
+        <div class="report-actions-stack">
+          <button type="button" class="modal-primary-btn" id="btnSubmitSuggestCafe">
+            <span>내 지도에 바로 추가 & 후기 등록하기</span>
+          </button>
+          <button type="button" class="secondary-sheet-btn" id="btnCopyAndOpenSuggestSheet">
+            <span>운영진 데이터 시트에도 함께 제보하기 ↗</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 토스트 알림 -->
     <div class="toast-message" id="toastPopup" role="status" aria-live="polite"></div>
   </div>
 
   <!-- Leaflet 1.9.4 & Hours Engine & App Logic -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="./hours.js?v=20261102_8"></script>
-  <script src="./app.js?v=20261102_8"></script>
+  <script src="./hours.js?v=20261102_9"></script>
+  <script src="./app.js?v=20261102_9"></script>
 </body>
 </html>
