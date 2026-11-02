@@ -206,7 +206,7 @@ function cycleFairyCheerMessage(sourceEl) {
   if (greetingBar) greetingBar.classList.remove("hidden");
   if (greetingText) greetingText.textContent = nextMsg;
   if (greetingImg) {
-    greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_3";
+    greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_6";
   }
 
   triggerFairySparkleAndHop(sourceEl || greetingImg);
@@ -382,6 +382,7 @@ function parseCSV(csvText) {
     "last_order",
     "closed_days",
     "note",
+    "image_url",
   ];
 
   const parsedItems = [];
@@ -448,6 +449,7 @@ function parseCSV(csvText) {
       last_order: (obj.last_order || "").trim(),
       closed_days: (obj.closed_days || "").trim(),
       note: (obj.note || "").trim(),
+      image_url: (obj.image_url || obj.photo || "").trim(),
     };
 
     if (item.map === "kagong" && item.name && !Number.isNaN(item.lat) && !Number.isNaN(item.lng)) {
@@ -525,6 +527,8 @@ async function loadPlacesData() {
               closed_days:
                 item.closed_days || (localMatch && localMatch.closed_days) || "",
               note: item.note || (localMatch && localMatch.note) || "",
+              image_url:
+                item.image_url || (localMatch && localMatch.image_url) || "",
             };
 
             if (mergedMap.has(nameKey)) {
@@ -534,6 +538,8 @@ async function loadPlacesData() {
               if (enriched._rawHours && !prev._rawHours) prev.hours = enriched.hours;
               if (enriched._rawOutlets && !prev._rawOutlets)
                 prev.outlets = enriched.outlets;
+              if (enriched.image_url && !prev.image_url)
+                prev.image_url = enriched.image_url;
             } else {
               mergedMap.set(nameKey, enriched);
             }
@@ -550,6 +556,15 @@ async function loadPlacesData() {
   }
 
   return window.HoursEngine.filterActivePlaces(localPlaces);
+}
+
+// 카페별 실제 매장 대표 사진(Hero Photo) 반환 (네이버 지도 / 카카오맵 등록 대표 사진 로컬 WebP + 시트 image_url 지원)
+function getPlaceHeroPhotoUrl(place) {
+  if (place.image_url && /^(https?:\/\/|\.\/|\/)/i.test(place.image_url.trim())) {
+    const rawUrl = place.image_url.trim();
+    return rawUrl.includes("?") ? rawUrl : `${rawUrl}?v=20261102_8`;
+  }
+  return `./assets/cafes/place-${place.id}.webp?v=20261102_8`;
 }
 
 // 10. URL 파라미터 동기화 (?campus=seoul|global&anchor=...&mood=...)
@@ -728,10 +743,9 @@ function mountMoodCardsOnce() {
     <svg class="mood-sparkle-dot" viewBox="0 0 16 16" aria-hidden="true">
       <defs>
         <linearGradient id="rainbowSparkleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#F26B5E" />
-          <stop offset="33%" stop-color="#F6C453" />
-          <stop offset="67%" stop-color="#4D96FF" />
-          <stop offset="100%" stop-color="#6BCB77" />
+          <stop offset="0%" stop-color="#4285F4" />
+          <stop offset="52%" stop-color="#8B5CF6" />
+          <stop offset="100%" stop-color="#D96570" />
         </linearGradient>
       </defs>
       <path fill="url(#rainbowSparkleGrad)" d="M8 0L9.8 6.2L16 8L9.8 9.8L8 16L6.2 9.8L0 8L6.2 6.2Z" />
@@ -784,34 +798,62 @@ function updateMoodCardsInPlace(refDate) {
     }
   });
 
-  // 세부 조건 버튼 숫자 배지 업데이트
+  // 오늘의 카공 카드 선택 / 카페 세부 조건 선택 탭 숫자 배지 업데이트
+  const tabMoodBtn = document.getElementById("tabMoodCards");
+  const tabMoodLabel = document.getElementById("tabMoodCardsLabel");
+  if (tabMoodBtn && tabMoodLabel) {
+    tabMoodBtn.classList.toggle("has-active", Boolean(state.selectedMood));
+    tabMoodLabel.textContent = state.selectedMood
+      ? "오늘의 카공 카드 선택 · 1"
+      : "오늘의 카공 카드 선택";
+  }
+
   const detailBtn = document.getElementById("btnOpenDetailFilter");
   const detailLabel = document.getElementById("detailFilterBtnLabel");
   const activeDetailCount = state.selectedDetails.size;
   if (detailBtn && detailLabel) {
     detailBtn.classList.toggle("has-active", activeDetailCount > 0);
     detailLabel.textContent =
-      activeDetailCount > 0 ? `세부 조건 ${activeDetailCount}` : "세부 조건";
+      activeDetailCount > 0
+        ? `카페 세부 조건 선택 · ${activeDetailCount}`
+        : "카페 세부 조건 선택";
   }
 }
 
 function mountDetailChipsOnce() {
   const grid = document.getElementById("detailChipGrid");
-  if (!grid || grid.children.length > 0) return;
+  if (grid && grid.children.length === 0) {
+    DETAIL_CONDITIONS.forEach((cond) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "detail-cond-chip";
+      btn.dataset.condKey = cond.key;
+      btn.setAttribute("aria-pressed", "false");
+      btn.setAttribute("aria-label", cond.label);
+      btn.innerHTML = `
+        <span>${cond.label}</span>
+        <span class="cond-remain-count" data-cond-count="${cond.key}">0곳</span>
+      `;
+      grid.appendChild(btn);
+    });
+  }
 
-  DETAIL_CONDITIONS.forEach((cond) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "detail-cond-chip";
-    btn.dataset.condKey = cond.key;
-    btn.setAttribute("aria-pressed", "false");
-    btn.setAttribute("aria-label", cond.label);
-    btn.innerHTML = `
-      <span>${cond.label}</span>
-      <span class="cond-remain-count" data-cond-count="${cond.key}">0곳</span>
-    `;
-    grid.appendChild(btn);
-  });
+  const inlineTrack = document.getElementById("inlineDetailTrack");
+  if (inlineTrack && inlineTrack.children.length === 0) {
+    DETAIL_CONDITIONS.forEach((cond) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "detail-cond-chip";
+      btn.dataset.condKey = cond.key;
+      btn.setAttribute("aria-pressed", "false");
+      btn.setAttribute("aria-label", cond.label);
+      btn.innerHTML = `
+        <span>${cond.label}</span>
+        <span class="cond-remain-count" data-cond-count="${cond.key}">0곳</span>
+      `;
+      inlineTrack.appendChild(btn);
+    });
+  }
 }
 
 function updateDetailChipsInPlace(refDate) {
@@ -819,11 +861,6 @@ function updateDetailChipsInPlace(refDate) {
   const basePlaces = getBaseFilteredPlaces(refDate);
 
   DETAIL_CONDITIONS.forEach((cond) => {
-    const chipEl = document.querySelector(
-      `.detail-cond-chip[data-cond-key="${cond.key}"]`
-    );
-    if (!chipEl) return;
-
     const isSelected = state.selectedDetails.has(cond.key);
     const hypotheticalSet = new Set(state.selectedDetails);
     hypotheticalSet.add(cond.key);
@@ -835,16 +872,25 @@ function updateDetailChipsInPlace(refDate) {
       refDate
     ).length;
 
-    chipEl.classList.toggle("is-selected", isSelected);
-    chipEl.classList.toggle("is-zero", remaining === 0 && !isSelected);
-    chipEl.setAttribute("aria-pressed", isSelected ? "true" : "false");
-    chipEl.dataset.remainCount = String(remaining);
+    document
+      .querySelectorAll(`.detail-cond-chip[data-cond-key="${cond.key}"]`)
+      .forEach((chipEl) => {
+        chipEl.classList.toggle("is-selected", isSelected);
+        chipEl.classList.toggle("is-zero", remaining === 0 && !isSelected);
+        chipEl.setAttribute("aria-pressed", isSelected ? "true" : "false");
+        chipEl.dataset.remainCount = String(remaining);
 
-    const countSpan = chipEl.querySelector(`[data-cond-count="${cond.key}"]`);
-    if (countSpan) {
-      countSpan.textContent = `${remaining}곳`;
-    }
+        const countSpan = chipEl.querySelector(`[data-cond-count="${cond.key}"]`);
+        if (countSpan) {
+          countSpan.textContent = `${remaining}곳`;
+        }
+      });
   });
+
+  const btnInlineReset = document.getElementById("btnInlineDetailReset");
+  if (btnInlineReset) {
+    btnInlineReset.classList.toggle("hidden", state.selectedDetails.size === 0);
+  }
 }
 
 // 14. 상단 헤더, 기준점 드롭다운, 요정 인사말 렌더링
@@ -916,7 +962,7 @@ function renderControlsAndGreeting(displayedPlaces, refDate) {
       greetingBar.classList.add("hidden");
     } else {
       greetingBar.classList.remove("hidden");
-      greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_3";
+      greetingImg.src = "./assets/fairy/fairy-trio.webp?v=20261102_6";
       const realSeoulNow = window.HoursEngine.getSeoulTimeParts(new Date());
       if (!state._customGreetingLocked) {
         if (realSeoulNow.hour >= 0 && realSeoulNow.hour < 7 && state.visitTimeMode === "now") {
@@ -970,15 +1016,17 @@ function renderPlaceList(displayedPlaces) {
 
     container.innerHTML = `
       <div class="empty-state-box">
-        <img
-          src="./assets/fairy/fairy-sleep.webp?v=20261102_3"
-          alt="별을 베고 졸고 있는 요정"
-          class="empty-fairy-img fairy-float"
-          id="emptySleepFairyImg"
-          width="136"
-          height="106"
-          loading="lazy"
-        />
+        <div class="fairy-gemini-halo">
+          <img
+            src="./assets/fairy/fairy-sleep.webp?v=20261102_6"
+            alt="별을 베고 졸고 있는 요정"
+            class="empty-fairy-img fairy-float"
+            id="emptySleepFairyImg"
+            width="136"
+            height="106"
+            loading="lazy"
+          />
+        </div>
         <p class="empty-state-title">${reasonText}</p>
         <p class="empty-state-sub">${state.anchorCoord.label} 기준 조건에 맞는 카페가 없어요.</p>
         <div class="empty-action-row">
@@ -1053,6 +1101,7 @@ function renderPlaceList(displayedPlaces) {
     .map((place) => {
       const st = place.businessStatus;
       const isClosedCard = !st.isOpen;
+      const isSelectedCard = place.id === state.selectedPlaceId;
       const distText = `${state.anchorCoord.label} ${formatDistanceLabel(place.distance)}`;
       const featureIconsHtml = buildPlaceFeatureIconsHtml(place);
 
@@ -1063,7 +1112,7 @@ function renderPlaceList(displayedPlaces) {
 
       return `
         <article
-          class="place-card ${isClosedCard ? "is-closed-card" : ""}"
+          class="place-card ${isClosedCard ? "is-closed-card" : ""} ${isSelectedCard ? "is-selected-card" : ""}"
           data-place-id="${place.id}"
           role="listitem"
           tabindex="0"
@@ -1092,13 +1141,14 @@ function renderPlaceList(displayedPlaces) {
     .join("");
 }
 
-// 16. 5-3 & 3-3절: 카페 상세 시트 렌더링 (요일별 영업시간 표, 확인일/신뢰도 배지, 외부 링크, 제보 링크)
+// 16. 5-3 & 3-3절: 카페 상세 시트 렌더링 (대표 사진 히어로 배너 + 3D 요정 길안내 + 네이버·카카오 후기 + 요일별 영업시간 표)
 function openPlaceDetail(placeId, panMap = true) {
   const refDate = getEffectiveReferenceDate();
   const activePlaces = window.HoursEngine.filterActivePlaces(state.places);
   const rawPlace = activePlaces.find((p) => p.id === Number(placeId));
   if (!rawPlace) return;
 
+  stopFairyNavigation(false);
   state.selectedPlaceId = rawPlace.id;
 
   const distance = getDistanceMeters(
@@ -1107,6 +1157,9 @@ function openPlaceDetail(placeId, panMap = true) {
     rawPlace.lat,
     rawPlace.lng
   );
+  const walkMinutes = Math.max(1, Math.round((distance * 1.28) / 67));
+  const heroPhotoUrl = getPlaceHeroPhotoUrl(rawPlace);
+
   const st = window.HoursEngine.getPlaceBusinessStatus(rawPlace, refDate);
   const verifiedInfo = window.HoursEngine.evaluateVerifiedAt(
     rawPlace.verified_at,
@@ -1117,7 +1170,9 @@ function openPlaceDetail(placeId, panMap = true) {
 
   const listView = document.getElementById("sheetListView");
   const detailView = document.getElementById("sheetDetailView");
+  const navView = document.getElementById("sheetFairyNavView");
   if (!listView || !detailView) return;
+  if (navView) navView.classList.add("hidden");
 
   const naverUrl =
     rawPlace.link ||
@@ -1158,51 +1213,127 @@ function openPlaceDetail(placeId, panMap = true) {
   }
 
   detailView.innerHTML = `
-    <div class="detail-top-bar">
-      <button type="button" class="back-list-btn" id="btnBackToList" aria-label="목록으로 돌아가기">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <line x1="19" y1="12" x2="5" y2="12"></line>
-          <polyline points="12 19 5 12 12 5"></polyline>
-        </svg>
-        <span>목록으로</span>
-      </button>
-      <div class="detail-top-actions">
-        <button type="button" class="icon-btn" id="btnDetailShare" aria-label="이 카페 공유 링크 복사">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="18" cy="5" r="3"></circle>
-            <circle cx="6" cy="12" r="3"></circle>
-            <circle cx="18" cy="19" r="3"></circle>
-            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+    <!-- 카페 이름 뒤에 깔리는 대표 사진 히어로 배너 -->
+    <div class="detail-hero-card" style="background-image: url('${heroPhotoUrl}');">
+      <img
+        src="${heroPhotoUrl}"
+        alt="${rawPlace.name} 실제 매장 대표 사진"
+        class="detail-hero-photo"
+        onerror="this.onerror=null;this.src='./assets/cafes/place-1.webp?v=20261102_8';"
+      />
+      <div class="detail-hero-scrim" aria-hidden="true"></div>
+      <div class="detail-hero-aurora-glow" aria-hidden="true"></div>
+
+      <div class="detail-hero-top-bar">
+        <button type="button" class="hero-glass-back-btn" id="btnBackToList" aria-label="목록으로 돌아가기">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
           </svg>
+          <span>목록으로</span>
         </button>
+
+        <div class="hero-top-right-group">
+          <span class="hero-glass-dist-pill">
+            ${state.anchorCoord.label} ${formatDistanceLabel(distance)} · 도보 ${walkMinutes}분
+          </span>
+          <button type="button" class="hero-glass-icon-btn" id="btnDetailShare" aria-label="이 카페 공유 링크 복사">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="detail-hero-bottom">
+        <div class="detail-hero-title-row">
+          <h2 class="detail-place-name">${rawPlace.name}</h2>
+        </div>
+        <div class="detail-hero-status-row">
+          ${
+            st.state === "temp_closed"
+              ? `<span class="hero-status-pill state-temp_closed">임시휴업</span>`
+              : `<span class="hero-status-pill state-${st.state}">${st.label}</span>`
+          }
+          <span class="hero-verified-text">
+            <span>· ${verifiedInfo.relativeLabel}</span>
+            ${
+              verifiedInfo.isStale
+                ? `<span class="hero-stale-badge">정보 확인 필요</span>`
+                : ""
+            }
+          </span>
+        </div>
       </div>
     </div>
 
     <div class="detail-header-block">
-      <div class="detail-title-row">
-        <h2 class="detail-place-name">${rawPlace.name}</h2>
-        <span class="detail-distance">${state.anchorCoord.label} ${formatDistanceLabel(distance)}</span>
-      </div>
-
-      <div class="detail-status-row">
-        ${
-          st.state === "temp_closed"
-            ? `<span class="gray-badge">임시휴업</span>`
-            : `<span class="status-text state-${st.state}">${st.label}</span>`
-        }
-        <span class="detail-verified-row">
-          <span>· ${verifiedInfo.relativeLabel}</span>
-          ${
-            verifiedInfo.isStale
-              ? `<span class="gray-badge">정보 확인 필요</span>`
-              : ""
-          }
-        </span>
-      </div>
-
       <p class="detail-summary-text">${rawPlace.summary}</p>
       ${tagsHtml ? `<div class="detail-tag-row">${tagsHtml}</div>` : ""}
+
+      <!-- 3D 요정에게 길 안내 받기 + 네이버 지도·후기 + 카카오맵·후기 통합 허브 -->
+      <div class="detail-navigation-hub">
+        <button
+          type="button"
+          class="fairy-route-cta-btn"
+          id="btnStartFairyRoute"
+          aria-label="3D 요정에게 이 카페까지 길 안내 받기"
+        >
+          <div class="fairy-route-cta-left">
+            <div class="fairy-gemini-halo">
+              <img
+                src="./assets/fairy/fairy-fly.webp?v=20261102_6"
+                alt=""
+                class="fairy-route-btn-img fairy-float"
+                width="44"
+                height="40"
+              />
+            </div>
+            <div class="fairy-route-cta-text-col">
+              <span class="fairy-route-cta-title">3D 요정에게 길 안내 받기</span>
+              <span class="fairy-route-cta-sub">${state.anchorCoord.label}에서 도보 약 ${walkMinutes}분 · 요정이 길을 따라 날아가요</span>
+            </div>
+          </div>
+          <span class="fairy-route-cta-arrow">길안내 시작 ➔</span>
+        </button>
+
+        <div class="detail-ext-links">
+          <a
+            href="${naverUrl}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="ext-link-btn naver-btn"
+            data-ext-type="naver_map"
+            aria-label="네이버 지도에서 사진 및 방문자 후기 보기"
+          >
+            <span class="ext-brand-dot naver" aria-hidden="true"></span>
+            <span>네이버 지도 · 후기</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="7" y1="17" x2="17" y2="7"></line>
+              <polyline points="7 7 17 7 17 17"></polyline>
+            </svg>
+          </a>
+          <a
+            href="${kakaoUrl}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="ext-link-btn kakao-btn"
+            data-ext-type="kakao_map"
+            aria-label="카카오맵에서 후기 및 위치 보기"
+          >
+            <span class="ext-brand-dot kakao" aria-hidden="true"></span>
+            <span>카카오맵 · 후기</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="7" y1="17" x2="17" y2="7"></line>
+              <polyline points="7 7 17 7 17 17"></polyline>
+            </svg>
+          </a>
+        </div>
+      </div>
     </div>
 
     <div class="detail-info-section">
@@ -1261,37 +1392,6 @@ function openPlaceDetail(placeId, panMap = true) {
       }
     </div>
 
-    <div class="detail-ext-links">
-      <a
-        href="${naverUrl}"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="ext-link-btn"
-        data-ext-type="naver_map"
-        aria-label="네이버 지도에서 사진 및 방문자 후기 보기"
-      >
-        <span>네이버 지도·후기</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <line x1="7" y1="17" x2="17" y2="7"></line>
-          <polyline points="7 7 17 7 17 17"></polyline>
-        </svg>
-      </a>
-      <a
-        href="${kakaoUrl}"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="ext-link-btn"
-        data-ext-type="kakao_map"
-        aria-label="카카오맵에서 후기 및 위치 보기"
-      >
-        <span>카카오맵 후기</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <line x1="7" y1="17" x2="17" y2="7"></line>
-          <polyline points="7 7 17 7 17 17"></polyline>
-        </svg>
-      </a>
-    </div>
-
     ${
       REPORT_FORM_URL && REPORT_FORM_URL.trim()
         ? `
@@ -1338,6 +1438,13 @@ function openPlaceDetail(placeId, panMap = true) {
     });
   }
 
+  const btnStartFairyRoute = document.getElementById("btnStartFairyRoute");
+  if (btnStartFairyRoute) {
+    btnStartFairyRoute.addEventListener("click", () => {
+      startFairyNavigation(rawPlace, "anchor");
+    });
+  }
+
   const btnReport = document.getElementById("btnReportInfo");
   if (btnReport) {
     btnReport.addEventListener("click", (e) => {
@@ -1362,14 +1469,639 @@ function openPlaceDetail(placeId, panMap = true) {
 }
 
 function closePlaceDetail() {
+  stopFairyNavigation(false);
   state.selectedPlaceId = null;
   const listView = document.getElementById("sheetListView");
   const detailView = document.getElementById("sheetDetailView");
+  const navView = document.getElementById("sheetFairyNavView");
+  if (navView) navView.classList.add("hidden");
   if (listView && detailView) {
     detailView.classList.add("hidden");
     listView.classList.remove("hidden");
   }
   highlightSelectedMarkerOnMap(null);
+}
+
+// =========================================================
+// 16-B. 3D 요정 실시간 도보 길안내 엔진 (지도 오로라 경로 + 비행 요정 + 턴바이턴 안내 + 음성 TTS)
+// =========================================================
+let fairyRouteLayerGroup = null;
+let fairyFlyingMarker = null;
+let fairyAnimFrameId = null;
+let currentFairyNavSession = null;
+
+function getCompassDirectionKo(lat1, lng1, lat2, lng2) {
+  const dy = lat2 - lat1;
+  const dx = (lng2 - lng1) * Math.cos((lat1 * Math.PI) / 180);
+  const angle = (Math.atan2(dx, dy) * 180) / Math.PI;
+  const deg = (angle + 360) % 360;
+  if (deg >= 337.5 || deg < 22.5) return "북쪽";
+  if (deg < 67.5) return "북동쪽";
+  if (deg < 112.5) return "동쪽";
+  if (deg < 157.5) return "남동쪽";
+  if (deg < 202.5) return "남쪽";
+  if (deg < 247.5) return "남서쪽";
+  if (deg < 292.5) return "서쪽";
+  return "북서쪽";
+}
+
+function generateSmartCampusFootpath(origin, place) {
+  const lat1 = origin.lat;
+  const lng1 = origin.lng;
+  const lat2 = place.lat;
+  const lng2 = place.lng;
+
+  const straightDist = getDistanceMeters(lat1, lng1, lat2, lng2);
+  const walkDist = Math.max(40, Math.round(straightDist * 1.24));
+  const durationMin = Math.max(1, Math.round(walkDist / 67));
+  const stepsCount = Math.max(50, Math.round(walkDist / 0.7));
+  const dirKo = getCompassDirectionKo(lat1, lng1, lat2, lng2);
+
+  // 실제 거리감을 살린 자연스러운 도로 꺾임 경유점 4단계 생성
+  const dLat = lat2 - lat1;
+  const dLng = lng2 - lng1;
+  const wp1 = [lat1 + dLat * 0.34, lng1 + dLng * 0.16];
+  const wp2 = [lat1 + dLat * 0.68, lng1 + dLng * 0.72];
+  const coords = [
+    [lat1, lng1],
+    wp1,
+    wp2,
+    [lat2, lng2],
+  ];
+
+  const roadHint =
+    place.campus === "seoul"
+      ? straightDist <= 260
+        ? "경희대로·정문 보행로"
+        : "회기로 메인 거리"
+      : straightDist <= 300
+      ? "국제캠 정문 대학로"
+      : "영통 중심상가 보행로";
+
+  const seg1Dist = Math.max(20, Math.round(walkDist * 0.38));
+  const seg2Dist = Math.max(20, walkDist - seg1Dist);
+
+  const steps = [
+    {
+      badge: "1구간 · 출발",
+      shortTag: `${origin.label}에서 출발! ✨`,
+      coord: [lat1, lng1],
+      instruction: `${origin.label}에서 ${dirKo} 방향(${roadHint})으로 약 ${seg1Dist}m 걸어갈게요!`,
+      tip: `총 도보 약 ${durationMin}분(${walkDist}m · 약 ${stepsCount}걸음) 코스예요. 요정을 따라오세요!`,
+    },
+    {
+      badge: "2구간 · 이동 중",
+      shortTag: `${roadHint} 따라 직진 🧚`,
+      coord: wp2,
+      instruction: `${roadHint}을 따라 ${place.name} 쪽으로 약 ${seg2Dist}m 더 이동해 주세요.`,
+      tip: `콘센트 팁: ${place.outlets}`,
+    },
+    {
+      badge: "3구간 · 도착 완료",
+      shortTag: `${place.name} 도착! 🎉`,
+      coord: [lat2, lng2],
+      instruction: `짜잔! ${place.name}에 도착했어요! 오늘 카공 목표까지 요정이 응원할게요!`,
+      tip: `${place.summary}`,
+    },
+  ];
+
+  return {
+    origin,
+    place,
+    coords,
+    distanceMeters: walkDist,
+    durationMin,
+    stepsCount,
+    steps,
+  };
+}
+
+async function buildFairyWalkingRoute(origin, place) {
+  const fallbackRoute = generateSmartCampusFootpath(origin, place);
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1600);
+    const url = `https://router.project-osrm.org/route/v1/foot/${origin.lng},${origin.lat};${place.lng},${place.lat}?overview=full&geometries=geojson&steps=true`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return fallbackRoute;
+    const data = await res.json();
+    if (!data.routes || !data.routes[0] || !data.routes[0].geometry) {
+      return fallbackRoute;
+    }
+    const route = data.routes[0];
+    const geoCoords = route.geometry.coordinates.map((c) => [c[1], c[0]]);
+    if (geoCoords.length < 2) return fallbackRoute;
+
+    const distMeters = Math.max(
+      fallbackRoute.distanceMeters,
+      Math.round(route.distance || fallbackRoute.distanceMeters)
+    );
+    const durationMin = Math.max(1, Math.round(distMeters / 67));
+    const stepsCount = Math.max(50, Math.round(distMeters / 0.7));
+    const midIdx = Math.floor(geoCoords.length / 2);
+
+    const steps = [
+      {
+        badge: "1구간 · 출발",
+        shortTag: `${origin.label} 출발! ✨`,
+        coord: geoCoords[0],
+        instruction: fallbackRoute.steps[0].instruction,
+        tip: `실제 도보 경로 약 ${durationMin}분(${distMeters}m · 약 ${stepsCount}걸음) 코스예요.`,
+      },
+      {
+        badge: "2구간 · 보행로 이동",
+        shortTag: `보행로 따라 이동 중 🧚`,
+        coord: geoCoords[midIdx],
+        instruction: fallbackRoute.steps[1].instruction,
+        tip: fallbackRoute.steps[1].tip,
+      },
+      {
+        badge: "3구간 · 도착 완료",
+        shortTag: `${place.name} 도착! 🎉`,
+        coord: geoCoords[geoCoords.length - 1],
+        instruction: fallbackRoute.steps[2].instruction,
+        tip: fallbackRoute.steps[2].tip,
+      },
+    ];
+
+    return {
+      origin,
+      place,
+      coords: geoCoords,
+      distanceMeters: distMeters,
+      durationMin,
+      stepsCount,
+      steps,
+    };
+  } catch (_err) {
+    return fallbackRoute;
+  }
+}
+
+function speakFairyInstruction(text) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    showToast(`🧚 요정 안내: "${text}"`);
+    return;
+  }
+  try {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ko-KR";
+    utter.rate = 1.05;
+    utter.pitch = 1.18;
+    window.speechSynthesis.speak(utter);
+    showToast("🔊 3D 요정이 목소리로 길을 안내하고 있어요!");
+  } catch (_e) {
+    showToast(`🧚 요정 안내: "${text}"`);
+  }
+}
+
+function stopFairyNavigation(returnToDetail = true) {
+  if (fairyAnimFrameId) {
+    cancelAnimationFrame(fairyAnimFrameId);
+    fairyAnimFrameId = null;
+  }
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (_e) {}
+  }
+  if (fairyRouteLayerGroup && leafletMap) {
+    leafletMap.removeLayer(fairyRouteLayerGroup);
+    fairyRouteLayerGroup = null;
+  }
+  fairyFlyingMarker = null;
+
+  const navView = document.getElementById("sheetFairyNavView");
+  const detailView = document.getElementById("sheetDetailView");
+  if (navView) navView.classList.add("hidden");
+  if (returnToDetail && detailView && state.selectedPlaceId !== null) {
+    detailView.classList.remove("hidden");
+  }
+  currentFairyNavSession = null;
+}
+
+function animateFairyAlongRoute(coords, onComplete) {
+  if (!fairyFlyingMarker || !coords || coords.length < 2) return;
+  if (fairyAnimFrameId) {
+    cancelAnimationFrame(fairyAnimFrameId);
+    fairyAnimFrameId = null;
+  }
+
+  // 세그먼트별 누적 거리 계산
+  const segLengths = [];
+  let totalLen = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const d = Math.hypot(
+      coords[i + 1][0] - coords[i][0],
+      coords[i + 1][1] - coords[i][1]
+    );
+    segLengths.push(d);
+    totalLen += d;
+  }
+  if (totalLen === 0) return;
+
+  const durationMs = 3400;
+  const startTime = performance.now();
+
+  function stepFrame(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(1, elapsed / durationMs);
+    // 부드러운 easeInOutCubic
+    const eased =
+      progress < 0.5
+        ? 4 * progress * progress * progress
+        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+    const targetDist = totalLen * eased;
+    let acc = 0;
+    let lat = coords[0][0];
+    let lng = coords[0][1];
+
+    for (let i = 0; i < segLengths.length; i++) {
+      if (acc + segLengths[i] >= targetDist) {
+        const segRatio =
+          segLengths[i] > 0 ? (targetDist - acc) / segLengths[i] : 0;
+        lat = coords[i][0] + (coords[i + 1][0] - coords[i][0]) * segRatio;
+        lng = coords[i][1] + (coords[i + 1][1] - coords[i][1]) * segRatio;
+        break;
+      }
+      acc += segLengths[i];
+    }
+
+    if (fairyFlyingMarker) {
+      fairyFlyingMarker.setLatLng([lat, lng]);
+    }
+
+    const tagEl = document.getElementById("mapFairyRouteTag");
+    if (tagEl && currentFairyNavSession) {
+      if (progress < 0.35) {
+        tagEl.textContent = currentFairyNavSession.route.steps[0].shortTag;
+      } else if (progress < 0.85) {
+        tagEl.textContent = currentFairyNavSession.route.steps[1].shortTag;
+      } else {
+        tagEl.textContent = currentFairyNavSession.route.steps[2].shortTag;
+      }
+    }
+
+    if (progress < 1) {
+      fairyAnimFrameId = requestAnimationFrame(stepFrame);
+    } else {
+      fairyAnimFrameId = null;
+      if (typeof onComplete === "function") onComplete();
+    }
+  }
+
+  fairyAnimFrameId = requestAnimationFrame(stepFrame);
+}
+
+function drawFairyRouteOnMap(routeData) {
+  initLeafletMapIfNeeded();
+  if (!leafletMap) return;
+
+  if (fairyRouteLayerGroup) {
+    leafletMap.removeLayer(fairyRouteLayerGroup);
+  }
+  fairyRouteLayerGroup = L.layerGroup().addTo(leafletMap);
+
+  // 1. 제미나이 오로라 외곽 광채 라인
+  L.polyline(routeData.coords, {
+    color: "#8B5CF6",
+    weight: 12,
+    opacity: 0.28,
+    lineCap: "round",
+    lineJoin: "round",
+  }).addTo(fairyRouteLayerGroup);
+
+  // 2. 제미나이 블루-바이올렛 메인 경로 실선
+  L.polyline(routeData.coords, {
+    color: "#4F46E5",
+    weight: 5,
+    opacity: 0.9,
+    lineCap: "round",
+    lineJoin: "round",
+  }).addTo(fairyRouteLayerGroup);
+
+  // 3. 위를 흐르는 화이트·핑크 점선 애니메이션
+  L.polyline(routeData.coords, {
+    color: "#FFFFFF",
+    weight: 3,
+    opacity: 0.95,
+    dashArray: "8, 12",
+    className: "fairy-route-animated-line",
+  }).addTo(fairyRouteLayerGroup);
+
+  // 4. 지도 위를 날아가며 안내하는 3D 비행 요정 마커 (fairy-fly.webp)
+  const flyIcon = L.divIcon({
+    className: "fairy-flying-route-marker",
+    html: `
+      <div class="fairy-flying-pin-wrap" id="mapFlyingFairyWrap">
+        <span class="fairy-flying-speech-tag" id="mapFairyRouteTag">${routeData.steps[0].shortTag}</span>
+        <div class="fairy-gemini-halo">
+          <img
+            src="./assets/fairy/fairy-fly.webp?v=20261102_6"
+            alt="길안내 3D 요정"
+            class="fairy-flying-pin-img fairy-float"
+            width="62"
+            height="58"
+          />
+        </div>
+      </div>
+    `,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+
+  fairyFlyingMarker = L.marker(routeData.coords[0], {
+    icon: flyIcon,
+    zIndexOffset: 1200,
+  }).addTo(fairyRouteLayerGroup);
+
+  fairyFlyingMarker.on("click", (e) => {
+    L.DomEvent.stopPropagation(e);
+    const wrapEl = document.getElementById("mapFlyingFairyWrap");
+    triggerFairySparkleAndHop(wrapEl);
+    if (currentFairyNavSession) {
+      const curStep =
+        currentFairyNavSession.route.steps[currentFairyNavSession.stepIndex];
+      speakFairyInstruction(curStep.instruction);
+    }
+  });
+
+  // 출발지와 도착지 카페가 지도 상단에 한눈에 들어오도록 카메라 맞춤
+  const bounds = L.latLngBounds(routeData.coords);
+  leafletMap.fitBounds(bounds, {
+    paddingTopLeft: [44, 54],
+    paddingBottomRight: [44, 290],
+    maxZoom: 17,
+    animate: true,
+  });
+
+  animateFairyAlongRoute(routeData.coords);
+}
+
+function renderFairyNavSheet() {
+  if (!currentFairyNavSession) return;
+  const { route, stepIndex, originMode } = currentFairyNavSession;
+  const { place, origin } = route;
+  const curStep = route.steps[stepIndex] || route.steps[0];
+
+  const navView = document.getElementById("sheetFairyNavView");
+  const detailView = document.getElementById("sheetDetailView");
+  const listView = document.getElementById("sheetListView");
+  if (!navView) return;
+
+  if (listView) listView.classList.add("hidden");
+  if (detailView) detailView.classList.add("hidden");
+  navView.classList.remove("hidden");
+
+  const naverUrl =
+    place.link ||
+    `https://map.naver.com/p/search/${encodeURIComponent(place.name)}`;
+  const kakaoQuery = encodeURIComponent(
+    `${place.campus === "seoul" ? "경희대 회기" : "경희대 영통"} ${place.name}`
+  );
+  const kakaoUrl = `https://map.kakao.com/?q=${kakaoQuery}`;
+
+  navView.innerHTML = `
+    <div class="fairy-nav-header">
+      <div class="fairy-nav-badge-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+        </svg>
+        <span>3D 요정 실시간 길안내</span>
+      </div>
+      <button type="button" class="fairy-nav-close-btn" id="btnCloseFairyNav" aria-label="길안내 종료하고 상세정보로 돌아가기">
+        <span>← 상세정보로</span>
+      </button>
+    </div>
+
+    <div class="fairy-nav-route-summary">
+      <div class="fairy-nav-from-to">
+        <div class="fairy-nav-route-endpoints">${origin.label} → ${place.name}</div>
+        <div class="fairy-nav-route-metrics">
+          도보 약 ${route.durationMin}분 · ${route.distanceMeters}m · 약 ${route.stepsCount}걸음
+        </div>
+      </div>
+      <div class="fairy-nav-origin-switch" role="group" aria-label="출발 위치 변경">
+        <button
+          type="button"
+          class="origin-pill-btn ${originMode === "anchor" ? "is-active" : ""}"
+          id="btnNavOriginAnchor"
+        >
+          ${state.anchorCoord.label} 출발
+        </button>
+        <button
+          type="button"
+          class="origin-pill-btn ${originMode === "gps" ? "is-active" : ""}"
+          id="btnNavOriginGps"
+        >
+          내 위치 출발
+        </button>
+      </div>
+    </div>
+
+    <div class="fairy-nav-stage-card">
+      <div class="fairy-nav-mascot-wrap fairy-gemini-halo" id="navStageFairyTrigger" title="요정을 누르면 음성으로 안내해 줘요">
+        <img
+          src="./assets/fairy/fairy-fly.webp?v=20261102_6"
+          alt="길안내 3D 요정"
+          class="fairy-nav-mascot-img fairy-float"
+          id="navStageFairyImg"
+          width="76"
+          height="70"
+        />
+      </div>
+      <div class="fairy-nav-bubble">
+        <div class="fairy-nav-step-chip-row">
+          <span class="fairy-nav-step-badge">${curStep.badge} (${stepIndex + 1}/${route.steps.length})</span>
+          <button type="button" class="fairy-nav-voice-btn" id="btnSpeakFairyStep" aria-label="요정 음성으로 길안내 듣기">
+            <span>🔊 음성 안내</span>
+          </button>
+        </div>
+        <p class="fairy-nav-instruction-text">${curStep.instruction}</p>
+        <p class="fairy-nav-tip-text">${curStep.tip}</p>
+      </div>
+    </div>
+
+    <div class="fairy-nav-controls-row">
+      <button
+        type="button"
+        class="fairy-step-ctrl-btn"
+        id="btnPrevRouteStep"
+        ${stepIndex === 0 ? "disabled" : ""}
+      >
+        <span>◀ 이전 구간</span>
+      </button>
+      <button
+        type="button"
+        class="fairy-step-ctrl-btn primary-step-btn"
+        id="btnNextRouteStep"
+        ${stepIndex >= route.steps.length - 1 ? "disabled" : ""}
+      >
+        <span>다음 구간 ▶</span>
+      </button>
+      <button
+        type="button"
+        class="fairy-step-ctrl-btn"
+        id="btnReplayFairyFlight"
+      >
+        <span>🔄 요정 다시 비행</span>
+      </button>
+    </div>
+
+    <div class="detail-ext-links">
+      <a
+        href="${naverUrl}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="ext-link-btn naver-btn"
+        aria-label="네이버 지도 앱에서 길찾기 및 후기 열기"
+      >
+        <span class="ext-brand-dot naver" aria-hidden="true"></span>
+        <span>네이버 지도 · 후기</span>
+      </a>
+      <a
+        href="${kakaoUrl}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="ext-link-btn kakao-btn"
+        aria-label="카카오맵에서 길찾기 및 후기 열기"
+      >
+        <span class="ext-brand-dot kakao" aria-hidden="true"></span>
+        <span>카카오맵 · 후기</span>
+      </a>
+    </div>
+  `;
+
+  const btnClose = document.getElementById("btnCloseFairyNav");
+  if (btnClose) {
+    btnClose.addEventListener("click", () => {
+      stopFairyNavigation(true);
+    });
+  }
+
+  const btnOriginAnchor = document.getElementById("btnNavOriginAnchor");
+  if (btnOriginAnchor) {
+    btnOriginAnchor.addEventListener("click", () => {
+      startFairyNavigation(place, "anchor");
+    });
+  }
+
+  const btnOriginGps = document.getElementById("btnNavOriginGps");
+  if (btnOriginGps) {
+    btnOriginGps.addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        showToast("이 브라우저에서는 GPS 위치 기능을 지원하지 않아요.");
+        return;
+      }
+      showToast("내 현재 위치(GPS)를 확인해 요정이 길을 다시 찾고 있어요...");
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          state.userGpsCoord = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            label: "내 현재 위치",
+          };
+          startFairyNavigation(place, "gps");
+        },
+        () => {
+          showToast(
+            `위치 권한이 꺼져 있어 ${state.anchorCoord.label} 기준으로 안내할게요!`
+          );
+          startFairyNavigation(place, "anchor");
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    });
+  }
+
+  const btnPrev = document.getElementById("btnPrevRouteStep");
+  if (btnPrev) {
+    btnPrev.addEventListener("click", () => {
+      if (currentFairyNavSession.stepIndex > 0) {
+        currentFairyNavSession.stepIndex -= 1;
+        const step =
+          currentFairyNavSession.route.steps[currentFairyNavSession.stepIndex];
+        if (fairyFlyingMarker && step.coord) {
+          fairyFlyingMarker.setLatLng(step.coord);
+          const tagEl = document.getElementById("mapFairyRouteTag");
+          if (tagEl) tagEl.textContent = step.shortTag;
+          if (leafletMap) leafletMap.panTo(step.coord, { animate: true });
+        }
+        renderFairyNavSheet();
+      }
+    });
+  }
+
+  const btnNext = document.getElementById("btnNextRouteStep");
+  if (btnNext) {
+    btnNext.addEventListener("click", () => {
+      if (
+        currentFairyNavSession.stepIndex <
+        currentFairyNavSession.route.steps.length - 1
+      ) {
+        currentFairyNavSession.stepIndex += 1;
+        const step =
+          currentFairyNavSession.route.steps[currentFairyNavSession.stepIndex];
+        if (fairyFlyingMarker && step.coord) {
+          fairyFlyingMarker.setLatLng(step.coord);
+          const tagEl = document.getElementById("mapFairyRouteTag");
+          if (tagEl) tagEl.textContent = step.shortTag;
+          if (leafletMap) leafletMap.panTo(step.coord, { animate: true });
+        }
+        renderFairyNavSheet();
+      }
+    });
+  }
+
+  const btnReplay = document.getElementById("btnReplayFairyFlight");
+  if (btnReplay) {
+    btnReplay.addEventListener("click", () => {
+      const fairyImg = document.getElementById("navStageFairyImg");
+      triggerFairySparkleAndHop(fairyImg);
+      animateFairyAlongRoute(route.coords);
+      showToast(`🧚 요정이 ${origin.label}에서 ${place.name}까지 다시 날아갑니다!`);
+    });
+  }
+
+  const btnSpeak = document.getElementById("btnSpeakFairyStep");
+  const navFairyTrigger = document.getElementById("navStageFairyTrigger");
+  const handleSpeak = () => {
+    const fairyImg = document.getElementById("navStageFairyImg");
+    triggerFairySparkleAndHop(fairyImg);
+    speakFairyInstruction(curStep.instruction);
+  };
+  if (btnSpeak) btnSpeak.addEventListener("click", handleSpeak);
+  if (navFairyTrigger) navFairyTrigger.addEventListener("click", handleSpeak);
+}
+
+async function startFairyNavigation(place, originMode = "anchor") {
+  const origin =
+    originMode === "gps" && state.userGpsCoord
+      ? state.userGpsCoord
+      : state.anchorCoord;
+
+  setBottomSheetState("half");
+  trackEvent("start_fairy_navigation", {
+    place_id: place.id,
+    place_name: place.name,
+    origin_mode: originMode,
+  });
+
+  const route = await buildFairyWalkingRoute(origin, place);
+  currentFairyNavSession = {
+    route,
+    stepIndex: 0,
+    originMode,
+  };
+
+  drawFairyRouteOnMap(route);
+  renderFairyNavSheet();
+  showToast(
+    `🧚 3D 요정이 ${origin.label}에서 ${place.name}까지 길 안내를 시작했어요!`
+  );
 }
 
 // 17. 5-2절: 지도 렌더링 (CARTO Positron 타일, 요정 얼굴 기준점 핀, 선택 마커만 라벨)
@@ -1400,6 +2132,10 @@ function highlightSelectedMarkerOnMap(selectedId) {
   markerElementsById.forEach((wrapEl, id) => {
     wrapEl.classList.toggle("is-selected", id === selectedId);
   });
+  document.querySelectorAll(".place-card").forEach((cardEl) => {
+    const cid = Number(cardEl.dataset.placeId);
+    cardEl.classList.toggle("is-selected-card", cid === selectedId);
+  });
 }
 
 function renderMapView(displayedPlaces) {
@@ -1417,31 +2153,31 @@ function renderMapView(displayedPlaces) {
   placeMarkersLayer.clearLayers();
   markerElementsById.clear();
 
-  // 반경 원: 얇고 연하게
+  // 반경 원: 은은한 제미나이 블루·바이올렛 점선
   if (state.radiusMeters > 0) {
     radiusCircle = L.circle([state.anchorCoord.lat, state.anchorCoord.lng], {
       radius: state.radiusMeters,
-      color: "#111111",
-      weight: 1.2,
-      opacity: 0.25,
+      color: "#6366F1",
+      weight: 1.4,
+      opacity: 0.35,
       dashArray: "5, 5",
-      fillColor: "#111111",
-      fillOpacity: 0.03,
+      fillColor: "#6366F1",
+      fillOpacity: 0.04,
     }).addTo(leafletMap);
   }
 
-  // 기준점 마커: 큼직한 3D 요정 얼굴 핀 (fairy-head-pin.webp, 64x64) + 클릭 인터랙션
+  // 기준점 마커: 흰 원 안에 가두지 않고 뒤에 은은한 흰빛·파란빛과 함께 지도 위에 떠 있는 3D 요정
   const anchorIcon = L.divIcon({
     className: "fairy-anchor-marker",
     html: `
       <div class="fairy-anchor-ring fairy-float" id="mapFairyAnchorRing" title="${state.anchorCoord.label} 기준점 (눌러서 중심 맞추기)">
         <div class="fairy-anchor-inner">
-          <img src="./assets/fairy/fairy-head-pin.webp?v=20261102_3" alt="${state.anchorCoord.label} 기준점" width="55" height="55" />
+          <img src="./assets/fairy/fairy-wave.webp?v=20261102_6" alt="${state.anchorCoord.label} 기준점" width="66" height="70" />
         </div>
       </div>
     `,
-    iconSize: [64, 64],
-    iconAnchor: [32, 32],
+    iconSize: [72, 76],
+    iconAnchor: [36, 38],
   });
 
   anchorMarker = L.marker([state.anchorCoord.lat, state.anchorCoord.lng], {
@@ -1462,7 +2198,7 @@ function renderMapView(displayedPlaces) {
     showToast(`${state.anchorCoord.label} 요정: "${cheerMsg}"`);
   });
 
-  const cupSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 1 1 0 8h-1"></path><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path></svg>`;
+  const cupSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 8h1a4 4 0 1 1 0 8h-1"></path><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path></svg>`;
 
   displayedPlaces.forEach((place) => {
     const st = place.businessStatus;
@@ -1472,9 +2208,9 @@ function renderMapView(displayedPlaces) {
 
     const markerHtml = `
       <div class="cafe-map-pin-wrap ${isSelected ? "is-selected" : ""}" data-marker-id="${place.id}">
-        <span class="cafe-pin-label">${place.name}</span>
         <div class="cafe-map-pin ${isClosedPin ? "pin-closed" : ""}">
           ${cupSvg}
+          <span class="cafe-pin-name-text">${place.name}</span>
           ${isClosingSoon ? `<span class="pin-closing-dot" title="곧 마감"></span>` : ""}
         </div>
       </div>
@@ -1483,8 +2219,8 @@ function renderMapView(displayedPlaces) {
     const icon = L.divIcon({
       className: "custom-cafe-pin-container",
       html: markerHtml,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
     });
 
     const marker = L.marker([place.lat, place.lng], {
@@ -1857,6 +2593,13 @@ function bindEvents() {
     );
   }
 
+  const btnQuickOfferPill = document.getElementById("btnQuickOfferPill");
+  if (btnQuickOfferPill) {
+    btnQuickOfferPill.addEventListener("click", () =>
+      openOfferModal("filter_bar_pill")
+    );
+  }
+
   const btnCloseOfferSheet = document.getElementById("btnCloseOfferSheet");
   if (btnCloseOfferSheet && offerModal) {
     btnCloseOfferSheet.addEventListener("click", () =>
@@ -1976,7 +2719,12 @@ function bindEvents() {
     });
   }
 
-  // 4-2절: 세부 조건 모달 열기/닫기/선택/초기화
+  // 4-2절: 「오늘의 카공 카드 선택」 / 「카페 세부 조건 선택」 탭 전환 + 인라인/모달 세부 조건 선택
+  const tabMoodCards = document.getElementById("tabMoodCards");
+  const moodCardsPanel = document.getElementById("moodCardsPanel");
+  const inlineDetailPanel = document.getElementById("inlineDetailPanel");
+  const inlineDetailTrack = document.getElementById("inlineDetailTrack");
+  const btnInlineDetailReset = document.getElementById("btnInlineDetailReset");
   const detailModal = document.getElementById("detailFilterModal");
   const btnOpenDetail = document.getElementById("btnOpenDetailFilter");
   const btnCloseDetail = document.getElementById("btnCloseDetailFilter");
@@ -1984,13 +2732,70 @@ function bindEvents() {
   const btnResetDetail = document.getElementById("btnResetDetailFilters");
   const detailGrid = document.getElementById("detailChipGrid");
 
-  if (btnOpenDetail && detailModal) {
+  if (tabMoodCards && moodCardsPanel && inlineDetailPanel && btnOpenDetail) {
+    tabMoodCards.addEventListener("click", () => {
+      tabMoodCards.classList.add("is-active");
+      tabMoodCards.setAttribute("aria-selected", "true");
+      btnOpenDetail.classList.remove("is-active");
+      btnOpenDetail.setAttribute("aria-selected", "false");
+      moodCardsPanel.classList.remove("hidden");
+      inlineDetailPanel.classList.add("hidden");
+    });
+
     btnOpenDetail.addEventListener("click", () => {
       updateDetailChipsInPlace(getEffectiveReferenceDate());
-      detailModal.classList.remove("hidden");
+      const isAlreadyInlineActive = !inlineDetailPanel.classList.contains("hidden");
+      if (!isAlreadyInlineActive) {
+        btnOpenDetail.classList.add("is-active");
+        btnOpenDetail.setAttribute("aria-selected", "true");
+        tabMoodCards.classList.remove("is-active");
+        tabMoodCards.setAttribute("aria-selected", "false");
+        moodCardsPanel.classList.add("hidden");
+        inlineDetailPanel.classList.remove("hidden");
+      } else if (detailModal) {
+        detailModal.classList.remove("hidden");
+      }
       trackEvent("open_detail_filters", {
         active_count: state.selectedDetails.size,
       });
+    });
+  }
+
+  const handleDetailChipClick = (e) => {
+    const chip = e.target.closest(".detail-cond-chip");
+    if (!chip) return;
+    const key = chip.dataset.condKey;
+    const remainCount = Number(chip.dataset.remainCount || "0");
+
+    if (state.selectedDetails.has(key)) {
+      state.selectedDetails.delete(key);
+    } else {
+      if (remainCount === 0) {
+        showToast("선택 시 조건에 맞는 카페가 0곳이 돼요.");
+        return;
+      }
+      state.selectedDetails.add(key);
+    }
+
+    trackEvent("filter_click", {
+      tag: key,
+      active_tags: Array.from(state.selectedDetails).join(","),
+      active_count: state.selectedDetails.size,
+    });
+    renderAll(false);
+  };
+
+  if (detailGrid) {
+    detailGrid.addEventListener("click", handleDetailChipClick);
+  }
+  if (inlineDetailTrack) {
+    inlineDetailTrack.addEventListener("click", handleDetailChipClick);
+  }
+  if (btnInlineDetailReset) {
+    btnInlineDetailReset.addEventListener("click", () => {
+      state.selectedDetails.clear();
+      trackEvent("filter_click", { action: "reset_detail_filters" });
+      renderAll(false);
     });
   }
 
@@ -2013,32 +2818,6 @@ function bindEvents() {
     btnResetDetail.addEventListener("click", () => {
       state.selectedDetails.clear();
       trackEvent("filter_click", { action: "reset_detail_filters" });
-      renderAll(false);
-    });
-  }
-
-  if (detailGrid) {
-    detailGrid.addEventListener("click", (e) => {
-      const chip = e.target.closest(".detail-cond-chip");
-      if (!chip) return;
-      const key = chip.dataset.condKey;
-      const remainCount = Number(chip.dataset.remainCount || "0");
-
-      if (state.selectedDetails.has(key)) {
-        state.selectedDetails.delete(key);
-      } else {
-        if (remainCount === 0) {
-          showToast("선택 시 조건에 맞는 카페가 0곳이 돼요.");
-          return;
-        }
-        state.selectedDetails.add(key);
-      }
-
-      trackEvent("filter_click", {
-        tag: key,
-        active_tags: Array.from(state.selectedDetails).join(","),
-        active_count: state.selectedDetails.size,
-      });
       renderAll(false);
     });
   }
