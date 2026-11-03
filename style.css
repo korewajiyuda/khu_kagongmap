@@ -3891,7 +3891,7 @@ body.is-fairy-nav-mode .fairy-step-ctrl-btn {
 }
 
 .unified-list-bottom-sheet.snap-half {
-  height: 45%;
+  height: 49%;
 }
 
 .unified-list-bottom-sheet.snap-full {
@@ -3948,7 +3948,7 @@ body.is-fairy-nav-mode .unified-list-bottom-sheet {
 }
 
 .main-swipe-viewport:has(.unified-list-bottom-sheet.snap-half) .map-custom-controls {
-  bottom: calc(45% + 12px);
+  bottom: calc(49% + 12px);
 }
 
 .main-swipe-viewport:has(.unified-list-bottom-sheet.snap-full) .map-custom-controls {
@@ -4041,7 +4041,7 @@ body.is-fairy-nav-mode .unified-list-bottom-sheet {
   position: absolute;
   left: 12px;
   right: 58px;
-  bottom: calc(45% + 12px);
+  bottom: calc(49% + 12px);
   z-index: 480;
   padding: 7px 10px;
   border-radius: 12px;
@@ -4331,35 +4331,115 @@ body.is-fairy-nav-mode .first-visit-mini-toast {
 }
 
 .gemini-api-key-box {
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 11px 12px;
+  border-radius: 14px;
   background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(124, 92, 255, 0.28);
+  border: 1.5px solid rgba(124, 92, 255, 0.32);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .gemini-api-key-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   font-size: 12px;
   color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .gemini-key-link {
-  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--gemini-grad);
+  color: #FFFFFF !important;
+  font-size: 11px;
   font-weight: 700;
-  color: #6366F1;
   text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.gemini-api-key-desc {
+.gemini-guide-why-box,
+.gemini-guide-steps-box {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.gemini-guide-why-title,
+.gemini-guide-steps-title {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.gemini-guide-why-list {
   margin: 0;
+  padding-left: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: 11px;
-  line-height: 1.38;
+  line-height: 1.42;
   color: var(--text-secondary);
+}
+
+.gemini-guide-why-list strong {
+  color: var(--text-primary);
+}
+
+.gemini-guide-sub {
+  color: var(--text-secondary);
+  opacity: 0.9;
+}
+
+.gemini-guide-steps-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.gemini-guide-steps-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.gemini-guide-steps-list strong {
+  color: var(--text-primary);
+}
+
+.g-step-badge {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.16);
+  color: #6366F1;
+  font-size: 10.5px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+body.is-night-mode .g-step-badge {
+  background: rgba(129, 140, 248, 0.25);
+  color: #A5B4FC;
 }
 
 .gemini-api-key-input-row {
@@ -4419,9 +4499,9 @@ body.is-night-mode .ai-engine-mode-tag {
 }
 
 .ai-conversational-bubble {
-  margin: 7px 0 8px;
-  padding: 9px 11px;
-  border-radius: 11px;
+  margin: 4px 0 5px;
+  padding: 7px 10px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid rgba(124, 92, 255, 0.2);
 }
@@ -4433,11 +4513,32 @@ body.is-night-mode .ai-conversational-bubble {
 
 .ai-conversational-text {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.48;
+  font-size: 11.5px;
+  line-height: 1.42;
   color: var(--text-primary);
   word-break: keep-all;
 }
+
+.sheet-scroll-body {
+  min-height: 0;
+}
+
+.place-card.is-ai-recommended-card {
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 3px 12px rgba(99, 102, 241, 0.12);
+}
+
+.card-ai-pick-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--gemini-grad);
+  color: #FFFFFF;
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 
 
 

@@ -1147,9 +1147,35 @@ function parseAiPromptIntent(rawPrompt) {
     intent.reasons.push("교내 카페");
   }
 
-  // 5) 개별 단어 키워드 추출 (가게 이름, 메뉴, 요약문 매칭용)
+  // 5) 프롬프트 문장에 대응하는 '오늘의 카공 카드(mood)' & '세부 조건(detail)' 자동 매칭
+  intent.matchedDetails = intent.tags.filter((t) =>
+    ["콘센트많음", "조용한", "1인석", "교내카페", "24시간"].includes(t)
+  );
+
+  if (/24시간|밤샘|새벽|올나잇|벼락치기|내일\s*시험/.test(q)) {
+    intent.matchedMood = "cram";
+  } else if (/밤\s*늦게|야간|저녁|밤\s*10시|밤\s*11시|늦게까지/.test(q)) {
+    intent.matchedMood = "late_night";
+  } else if (/팀플|회의|단체|여러\s*명|같이|과제/.test(q)) {
+    intent.matchedMood = "team";
+  } else if (/싼|저렴|가성비|저가|부담\s*없|메가|컴포즈|빽다방|고씨/.test(q)) {
+    intent.matchedMood = "budget";
+  } else if (/예쁜|감성|분위기|인스타|디저트|맛집|케이크|베이글|크루아상|로스터리|수다|대화|얘기|떠들/.test(q)) {
+    intent.matchedMood = "chatty_pretty";
+  } else if (/공강|1시간|멀리|귀찮|코앞/.test(q)) {
+    intent.matchedMood = "gap_hour";
+  } else if (/배터리|간당간당|충전|콘센트|노트북|전원|멀티탭/.test(q) && !/조용|혼자|1인석/.test(q)) {
+    intent.matchedMood = "battery";
+  } else if (/조용|집중|빡공|독서실|혼자|1인석|혼공|시험/.test(q)) {
+    intent.matchedMood = "alone";
+  } else {
+    intent.matchedMood = null;
+  }
+
+  // 6) 개별 단어 키워드 추출 (가게 이름, 메뉴, 요약문 매칭용)
   const stopWords = new Set([
-    "카페", "추천", "추천해줘", "추천해", "알려줘", "찾아줘", "어디", "있어", "좋은", "하기", "공부", "카공", "할만한", "곳", "좀", "근처", "주변", "에서", "하고", "싶어", "갈만한"
+    "카페", "추천", "추천해줘", "추천해", "알려줘", "찾아줘", "어디", "있어", "좋은", "하기", "공부", "카공", "할만한", "곳", "좀", "근처", "주변", "에서", "하고", "싶어", "갈만한",
+    "정문", "후문", "회기", "회기역", "영통", "영통역", "사색", "광장", "서울캠", "국제캠", "조용한", "조용하고", "콘센트", "많은"
   ]);
   q.split(/[\s,·!?~]+/)
     .map((w) => w.replace(/(에서|으로|이랑|하고|할래|해줘|추천|카페|근처|주변)$/g, "").trim())
@@ -1165,9 +1191,9 @@ function scorePlacesByAiPrompt(places, rawPrompt, refDate) {
     let score = 0;
     const matchedReasons = [];
 
-    // 영업 중 가산점
+    // 영업 중 가산점 (현재 열려 있는 곳 우선 추천)
     if (p.businessStatus && p.businessStatus.isOpen) {
-      score += 15;
+      score += 28;
     }
 
     // 태그 일치 점수
@@ -1292,18 +1318,58 @@ function applyAiPromptRecommendation(rawPrompt, fromUrl = false) {
   // 전체 반경에서 최적 추천
   state.radiusMeters = 0;
 
+  // ★ 프롬프트 검색 시 문장에 맞는 '오늘의 카공 카드'와 '세부 조건 칩'도 자동으로 함께 선택!
+  const refDate = getEffectiveReferenceDate();
+  const baseForMatch = getBaseFilteredPlaces(refDate);
+  if (intent.matchedDetails && intent.matchedDetails.length > 0) {
+    const autoDetails = new Set();
+    intent.matchedDetails.forEach((dKey) => {
+      const testSet = new Set(autoDetails);
+      testSet.add(dKey);
+      if (applyMoodAndDetails(baseForMatch, null, testSet, refDate).length > 0) {
+        autoDetails.add(dKey);
+      }
+    });
+    if (autoDetails.size > 0) {
+      state.selectedDetails = autoDetails;
+    }
+  }
+  if (intent.matchedMood) {
+    if (
+      applyMoodAndDetails(
+        baseForMatch,
+        intent.matchedMood,
+        state.selectedDetails,
+        refDate
+      ).length > 0
+    ) {
+      state.selectedMood = intent.matchedMood;
+    }
+  }
+
   const detailModal = document.getElementById("detailFilterModal");
   if (detailModal) {
     detailModal.classList.add("hidden");
   }
 
+  closePlaceDetail();
+  const listViewEl = document.getElementById("sheetListView");
+  if (listViewEl) {
+    listViewEl.classList.remove("hidden");
+  }
+
   renderAll(shouldRecenter || !fromUrl);
   setMainViewMode("list", "ai_prompt_recommend", false);
+
+  const scrollBody = document.getElementById("sheetScrollBody");
+  if (scrollBody) {
+    scrollBody.scrollTop = 0;
+  }
 
   const greetingImg = document.getElementById("greetingFairyImg");
   if (greetingImg) triggerFairySparkleAndHop(greetingImg);
   if (!fromUrl) {
-    showToast("🧚 제발요가 조건에 딱 맞는 카공 카페 TOP 3를 추천했어요!");
+    showToast("🧚 질문에 맞는 카공 카드·조건을 자동 선택해 TOP 추천을 띄웠어요!");
   }
 }
 
@@ -1874,6 +1940,8 @@ function renderControlsAndGreeting(displayedPlaces, refDate) {
 
 // 15. 5-3절: 컴팩트 목록 카드 렌더링 (높이 96~110px, 3줄 구성)
 function renderPlaceList(displayedPlaces) {
+  const listView = document.getElementById("sheetListView");
+  if (listView) listView.classList.remove("hidden");
   const container = document.getElementById("placeListContainer");
   if (!container) return;
 
@@ -1965,11 +2033,17 @@ function renderPlaceList(displayedPlaces) {
     return;
   }
 
+  const hasActiveSearch =
+    Boolean(state.aiPromptQuery && state.aiPromptQuery.trim()) ||
+    Boolean(state.selectedMood) ||
+    state.selectedDetails.size > 0;
+
   container.innerHTML = displayedPlaces
-    .map((place) => {
+    .map((place, idx) => {
       const st = place.businessStatus;
       const isClosedCard = !st.isOpen;
       const isSelectedCard = place.id === state.selectedPlaceId;
+      const isAiTopPick = hasActiveSearch && idx < 3;
       const distText = `${state.anchorCoord.label} ${formatDistanceLabel(place.distance)}`;
       const featureIconsHtml = buildPlaceFeatureIconsHtml(place);
 
@@ -1978,9 +2052,13 @@ function renderPlaceList(displayedPlaces) {
           ? `<span class="gray-badge">임시휴업</span>`
           : `<span class="status-text state-${st.state}">${st.label}</span>`;
 
+      const aiRankBadgeHtml = isAiTopPick
+        ? `<span class="card-ai-pick-badge">${idx === 0 ? "✨ 1위 추천" : `${idx + 1}위 추천`}</span>`
+        : "";
+
       return `
         <article
-          class="place-card ${isClosedCard ? "is-closed-card" : ""} ${isSelectedCard ? "is-selected-card" : ""}"
+          class="place-card ${isClosedCard ? "is-closed-card" : ""} ${isSelectedCard ? "is-selected-card" : ""} ${isAiTopPick ? "is-ai-recommended-card" : ""}"
           data-place-id="${place.id}"
           role="listitem"
           tabindex="0"
@@ -1988,6 +2066,7 @@ function renderPlaceList(displayedPlaces) {
         >
           <div class="card-row-1">
             <div class="card-title-group">
+              ${aiRankBadgeHtml}
               <h3 class="card-place-name">${place.name}</h3>
             </div>
             <span class="card-distance">${distText}</span>
@@ -2502,6 +2581,8 @@ function closePlaceDetail() {
   const sheet = document.getElementById("mainBottomSheet");
   const detailView = document.getElementById("sheetDetailView");
   const navView = document.getElementById("sheetFairyNavView");
+  const listView = document.getElementById("sheetListView");
+  if (listView) listView.classList.remove("hidden");
   if (navView) navView.classList.add("hidden");
   if (detailView) detailView.classList.add("hidden");
   if (sheet) {
@@ -3051,7 +3132,9 @@ function stopFairyNavigation(returnToDetail = true) {
   const sheet = document.getElementById("mainBottomSheet");
   const navView = document.getElementById("sheetFairyNavView");
   const detailView = document.getElementById("sheetDetailView");
+  const listView = document.getElementById("sheetListView");
   document.body.classList.remove("is-fairy-nav-mode");
+  if (listView) listView.classList.remove("hidden");
   if (sheet) sheet.classList.remove("is-fairy-nav");
   if (navView) navView.classList.add("hidden");
   if (returnToDetail && detailView && state.selectedPlaceId !== null) {
@@ -3353,10 +3436,8 @@ function renderFairyNavSheet() {
 
   const navView = document.getElementById("sheetFairyNavView");
   const detailView = document.getElementById("sheetDetailView");
-  const listView = document.getElementById("sheetListView");
   if (!navView) return;
 
-  if (listView) listView.classList.add("hidden");
   if (detailView) detailView.classList.add("hidden");
   navView.classList.remove("hidden");
 
