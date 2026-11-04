@@ -20,6 +20,7 @@
   --status-closing: #D97706;
   --status-closed: #64748B;
   --gemini-primary: #4E54E8;
+  --gemini-accent-text: #3730A3;
   --gemini-grad: linear-gradient(
     135deg,
     #4285F4 0%,
@@ -1311,13 +1312,18 @@ body.is-night-mode .detail-refresh-hours-btn {
 }
 
 .custom-time-input {
-  height: 30px;
-  padding: 0 5px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+  min-width: 112px;
+  width: auto;
+  height: 31px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid #6366F1;
   background-color: var(--bg-warm);
-  font-size: 13px;
-  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .open-now-toggle {
@@ -2857,6 +2863,13 @@ body.is-night-mode {
   --text-primary: #F8FAFC;
   --text-secondary: #94A3B8;
   --border-color: #334155;
+  --gemini-accent-text: #E0E7FF;
+  --gemini-soft-bg: linear-gradient(
+    135deg,
+    rgba(49, 46, 129, 0.72) 0%,
+    rgba(76, 29, 149, 0.68) 52%,
+    rgba(131, 24, 67, 0.62) 100%
+  );
   background-color: #090D16;
   color: #F8FAFC;
 }
@@ -3023,6 +3036,92 @@ body.is-night-mode .review-vibe-chip {
   background-color: #1E293B;
   border-color: #334155;
   color: #F8FAFC;
+}
+
+body.is-night-mode .review-vibe-chip.is-active,
+body.is-night-mode .review-vibe-chip.is-selected {
+  background: rgba(99, 102, 241, 0.28);
+  border-color: #818CF8;
+  color: #E0E7FF;
+}
+
+body.is-night-mode .review-card-tag,
+body.is-night-mode .detail-review-tag-badge {
+  color: #A5B4FC;
+}
+
+body.is-night-mode .detail-tag-pill {
+  background: rgba(99, 102, 241, 0.24);
+  border-color: rgba(129, 140, 248, 0.48);
+  color: #E0E7FF;
+}
+
+body.is-night-mode .detail-navigation-hub {
+  background: linear-gradient(135deg, #1E293B 0%, #1E1B4B 55%, #2E1035 100%);
+  border-color: rgba(129, 140, 248, 0.36);
+}
+
+body.is-night-mode .ext-link-btn {
+  background-color: #0F172A;
+  color: #F8FAFC;
+  box-shadow: 0 2px 8px rgba(2, 6, 23, 0.45);
+}
+
+body.is-night-mode .ext-link-btn.naver-btn {
+  border-color: rgba(3, 199, 90, 0.55);
+}
+
+body.is-night-mode .ext-link-btn.kakao-btn {
+  border-color: rgba(250, 204, 21, 0.55);
+}
+
+body.is-night-mode .ext-link-btn:hover {
+  background-color: #1E293B;
+}
+
+body.is-night-mode .fairy-nav-stage-card {
+  background: linear-gradient(135deg, #1E293B 0%, #1E1B4B 55%, #2E1035 100%);
+  border-color: rgba(129, 140, 248, 0.4);
+}
+
+body.is-night-mode .fairy-nav-voice-btn {
+  background: #0F172A;
+  border-color: rgba(129, 140, 248, 0.45);
+  color: #E0E7FF;
+}
+
+body.is-night-mode .unified-search-trigger-btn.has-active {
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.92) 0%, rgba(49, 16, 66, 0.88) 100%);
+  border-color: #818CF8;
+}
+
+body.is-night-mode .unified-search-trigger-btn.has-active .unified-search-placeholder {
+  color: #E0E7FF;
+}
+
+body.is-night-mode .custom-time-input {
+  background-color: #1E293B;
+  border-color: #818CF8;
+  color: #F8FAFC;
+  color-scheme: dark;
+}
+
+body.is-night-mode .list-end-action-card.is-offer-card {
+  background: linear-gradient(135deg, rgba(6, 78, 59, 0.48) 0%, rgba(30, 58, 138, 0.48) 100%);
+  border-color: rgba(52, 211, 153, 0.42);
+}
+
+body.is-night-mode .modal-fairy-trio-banner {
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.85), rgba(49, 16, 66, 0.82));
+  border-color: rgba(129, 140, 248, 0.35);
+}
+
+body.is-night-mode .modal-fairy-trio-copy strong {
+  color: #F8FAFC;
+}
+
+body.is-night-mode .modal-fairy-trio-copy span {
+  color: #CBD5E1;
 }
 
 /* =========================================================

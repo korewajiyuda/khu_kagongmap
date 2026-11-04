@@ -100,8 +100,8 @@
   }
 
   /**
-   * 다가오는 특정 시각(예: 아침 9시, 낮 2시, 밤 10시)을 기준으로 서울 Date 객체를 반환한다.
-   * 새벽 2시에 "아침 9시"를 고르면 당일 오전 9시, 밤 11시에 "아침 9시"를 고르면 다음 날 오전 9시가 된다.
+   * 다가오는 특정 시각(예: 아침 10시, 낮 2시, 밤 10시)을 기준으로 서울 Date 객체를 반환한다.
+   * 새벽 2시에 "아침 10시"를 고르면 당일 오전 10시, 밤 11시에 "아침 10시"를 고르면 다음 날 오전 10시가 된다.
    */
   function createUpcomingSeoulDateAtTime(hour, minute, baseDate) {
     const ref = baseDate instanceof Date ? baseDate : new Date();
