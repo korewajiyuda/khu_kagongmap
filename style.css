@@ -4728,6 +4728,572 @@ body.is-night-mode .ai-conversational-bubble {
   flex-shrink: 0;
 }
 
+/* =========================================================
+   24. "나 여기서 공부 중" 실시간 체크인 + 지도 위 내 요정 아바타
+   ========================================================= */
+
+/* 1) 요정 5가지 색상 틴트 (CSS filter) */
+.fairy-tint-pink {
+  filter: hue-rotate(-18deg) saturate(1.25) brightness(1.03)
+    drop-shadow(0 2px 6px rgba(244, 114, 182, 0.55));
+}
+.fairy-tint-mint {
+  filter: hue-rotate(115deg) saturate(1.28) brightness(1.04)
+    drop-shadow(0 2px 6px rgba(52, 211, 153, 0.55));
+}
+.fairy-tint-sky {
+  filter: hue-rotate(185deg) saturate(1.3) brightness(1.04)
+    drop-shadow(0 2px 6px rgba(56, 189, 248, 0.55));
+}
+.fairy-tint-lemon {
+  filter: hue-rotate(38deg) saturate(1.35) brightness(1.06)
+    drop-shadow(0 2px 6px rgba(251, 191, 36, 0.55));
+}
+.fairy-tint-lilac {
+  filter: hue-rotate(245deg) saturate(1.25) brightness(1.03)
+    drop-shadow(0 2px 6px rgba(167, 139, 250, 0.55));
+}
+
+/* 집중 중(focus): 펜 끄적이는 느낌으로 살짝 까딱이는 애니메이션 */
+@keyframes fairyFocusScribble {
+  0%, 100% {
+    transform: translateY(0) rotate(-3deg);
+  }
+  25% {
+    transform: translateY(-2px) rotate(2deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(-2deg);
+  }
+  75% {
+    transform: translateY(-1px) rotate(3deg);
+  }
+}
+
+.fairy-focus-scribble {
+  animation: fairyFocusScribble 2.1s ease-in-out infinite !important;
+}
+
+/* 2) 지도 핀 위 요정 레이어 (내 요정 44px + 다른 사람 미니 요정 최대 3마리 + "+N") */
+.cafe-map-pin-wrap.has-my-checkin {
+  z-index: 880 !important;
+}
+
+.cafe-map-pin-wrap.has-any-checkin:not(.has-my-checkin):not(.is-selected) {
+  z-index: 620 !important;
+}
+
+.cafe-checkin-layer {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 12;
+}
+
+/* 내 요정 아바타 (44px, 머리 위 "나" 배지 + 닉네임 말풍선) */
+.cafe-my-fairy-avatar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: -2px;
+  pointer-events: auto;
+}
+
+.my-fairy-speech-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px 2px 4px;
+  border-radius: 999px;
+  background: #1E1B4B;
+  color: #FFFFFF;
+  border: 1.5px solid #FFFFFF;
+  box-shadow: 0 3px 10px rgba(30, 27, 75, 0.32);
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  margin-bottom: 2px;
+  line-height: 1.2;
+}
+
+.my-fairy-me-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #EC4899, #8B5CF6);
+  color: #FFFFFF;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.my-fairy-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34D399;
+  flex-shrink: 0;
+}
+.my-fairy-status-dot.status-break {
+  background: #FBBF24;
+}
+.my-fairy-status-dot.status-leaving {
+  background: #F87171;
+}
+
+.my-fairy-img-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.92) 0%, rgba(238, 242, 255, 0.45) 65%, transparent 100%);
+}
+
+.my-fairy-img-wrap img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+/* 다른 사람 미니 요정 스택 (최대 3마리 겹침 + "+N") */
+.cafe-peer-fairies-stack {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(199, 210, 254, 0.9);
+  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.14);
+  margin-bottom: 1px;
+}
+
+/* 모바일 성능 고려: 줌 레벨이 낮을 때(15 이하)는 내 요정이 아닌 다른 사람 미니 요정 이미지는 숨기고 배지만 표시 */
+.map-stage:not(.is-zoomed-in) .cafe-map-pin-wrap:not(.is-selected) .cafe-peer-fairies-stack {
+  display: none;
+}
+
+.peer-mini-fairy {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  margin-left: -6px;
+}
+
+.peer-mini-fairy:first-child {
+  margin-left: 0;
+}
+
+.peer-more-count {
+  margin-left: 2px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #EEF2FF;
+  color: #4338CA;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+/* 3) 핀 옆 인원 배지: "7명 카공 중" (1~2명 초록, 3~5명 노랑, 6명+ 주황) */
+.cafe-pin-crowd-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  border: 1.5px solid #FFFFFF;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+  margin-left: 4px;
+  z-index: 10;
+}
+
+.cafe-pin-crowd-badge.hidden {
+  display: none !important;
+}
+
+.cafe-pin-crowd-badge.crowd-low {
+  background: #10B981;
+  color: #FFFFFF;
+}
+
+.cafe-pin-crowd-badge.crowd-mid {
+  background: #F59E0B;
+  color: #FFFFFF;
+}
+
+.cafe-pin-crowd-badge.crowd-high {
+  background: #F97316;
+  color: #FFFFFF;
+}
+
+/* 4) 밤 모드(body.is-night-mode) 연동: 체크인 인원(--crowd: 0~1)에 비례해 .cafe-light-orb가 더 밝고 크게 숨쉬듯 빛남 */
+@keyframes orbCrowdBreathe {
+  0%, 100% {
+    transform: scale(calc(0.95 + var(--crowd, 0) * 0.35));
+    opacity: calc(0.82 + var(--crowd, 0) * 0.18);
+  }
+  50% {
+    transform: scale(calc(1.28 + var(--crowd, 0) * 0.65));
+    opacity: 1;
+  }
+}
+
+body.is-night-mode .cafe-light-orb:not(.orb-closed) {
+  transform: scale(calc(1 + var(--crowd, 0) * 0.28));
+}
+
+body.is-night-mode .cafe-light-orb:not(.orb-closed) .orb-halo {
+  inset: calc(-4px - var(--crowd, 0) * 10px);
+  opacity: calc(0.82 + var(--crowd, 0) * 0.18);
+  filter: blur(calc(1px + var(--crowd, 0) * 3px));
+}
+
+body.is-night-mode .cafe-light-orb:not(.orb-closed) .orb-core {
+  box-shadow:
+    0 0 calc(8px + var(--crowd, 0) * 8px) calc(3px + var(--crowd, 0) * 3px) rgba(255, 255, 255, 0.98),
+    0 0 calc(15px + var(--crowd, 0) * 16px) calc(6px + var(--crowd, 0) * 6px) rgba(96, 165, 250, 0.9),
+    0 0 calc(24px + var(--crowd, 0) * 22px) calc(10px + var(--crowd, 0) * 8px) rgba(167, 139, 250, 0.65);
+}
+
+body.is-night-mode .cafe-map-pin-wrap[data-has-crowd="true"] .cafe-light-orb:not(.orb-closed) .orb-halo {
+  animation: orbCrowdBreathe 4.2s ease-in-out infinite;
+}
+
+/* 영업 종료 카페(orb-closed)는 인원이 있어도 절대 밝아지지 않게 고정 */
+body.is-night-mode .cafe-light-orb.orb-closed,
+body.is-night-mode .cafe-map-pin-wrap[data-has-crowd="true"] .cafe-light-orb.orb-closed {
+  transform: none !important;
+  opacity: 0.45 !important;
+}
+
+body.is-night-mode .cafe-light-orb.orb-closed .orb-halo {
+  display: none !important;
+  animation: none !important;
+}
+
+/* 5) 목록 카드 & 상세 시트 실시간 카공 인원 배지 ("지금 카공맵 유저 N명이 공부 중") */
+.card-live-checkin-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.card-live-checkin-line.hidden {
+  display: none !important;
+}
+
+body.is-night-mode .card-live-checkin-line {
+  background: rgba(16, 185, 129, 0.22);
+  color: #6EE7B7;
+}
+
+.card-live-checkin-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+}
+
+/* 6) 카페 상세 시트 내 "나 여기서 공부 중" 체크인 허브 */
+.detail-checkin-hub {
+  margin-top: 10px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(238, 242, 255, 0.85) 0%, rgba(253, 242, 248, 0.85) 100%);
+  border: 1.5px solid rgba(139, 92, 246, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+body.is-night-mode .detail-checkin-hub {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.92) 0%, rgba(49, 46, 129, 0.65) 100%);
+  border-color: rgba(139, 92, 246, 0.45);
+}
+
+.detail-checkin-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.detail-checkin-live-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.detail-checkin-edit-profile-btn {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+body.is-night-mode .detail-checkin-edit-profile-btn {
+  background: rgba(15, 23, 42, 0.75);
+  color: #CBD5E1;
+}
+
+.btn-start-checkin-cta {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 52%, #EC4899 100%);
+  color: #FFFFFF;
+  font-size: 13.5px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.32);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-start-checkin-cta:active {
+  transform: scale(0.98);
+}
+
+.btn-start-checkin-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-start-checkin-sub {
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+/* 체크인 완료 상태 컨트롤 (집중 중 / 잠깐 휴식 / 곧 나가요 + 공부 끝) */
+.checkin-active-status-box {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.checkin-active-my-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.checkin-my-avatar-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.checkin-my-avatar-summary img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.checkin-remain-time-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.checkin-status-chip-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+
+.checkin-status-chip {
+  min-height: 34px;
+  padding: 0 6px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-white);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.checkin-status-chip.is-active {
+  border-color: transparent;
+  background: var(--gemini-grad);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.28);
+}
+
+.checkin-status-chip.is-end-btn {
+  border-color: rgba(239, 68, 68, 0.38);
+  background: rgba(254, 242, 242, 0.9);
+  color: #DC2626;
+}
+
+body.is-night-mode .checkin-status-chip.is-end-btn {
+  background: rgba(127, 29, 29, 0.45);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #FCA5A5;
+}
+
+/* 7) 체크인 설정 모달 스타일 */
+.checkin-setup-modal-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.checkin-preview-fairy-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #FFFFFF 0%, #EEF2FF 100%);
+  border: 1.5px solid #C7D2FE;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.checkin-setup-place-sub {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.checkin-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.checkin-random-nick-btn {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-warm);
+  border: 1px solid var(--border-color);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.checkin-color-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.checkin-color-chip {
+  min-height: 44px;
+  padding: 5px 4px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-white);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.checkin-color-chip.is-selected {
+  border-color: #6366F1;
+  background: rgba(99, 102, 241, 0.1);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+}
+
+.color-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid #FFFFFF;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
+}
+.swatch-pink { background: #F472B6; }
+.swatch-mint { background: #34D399; }
+.swatch-sky { background: #38BDF8; }
+.swatch-lemon { background: #FBBF24; }
+.swatch-lilac { background: #A78BFA; }
+
+.checkin-hours-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.checkin-privacy-notice {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-warm);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.38;
+}
+
+/* 8) 체크인 순간 내 위치에서 카페 핀으로 날아가는 요정 연출 */
+.checkin-flight-fairy-overlay {
+  position: fixed;
+  width: 48px;
+  height: 48px;
+  pointer-events: none;
+  z-index: 2500;
+  transition: transform 680ms cubic-bezier(0.22, 1, 0.36, 1), opacity 680ms ease;
+}
+
+.checkin-flight-fairy-overlay img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+
 
 
 

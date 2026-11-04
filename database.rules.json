@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "checkins": {
+      "$campus": {
+        ".read": "auth != null && ($campus === 'seoul' || $campus === 'global')",
+        "$placeId": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && ($campus === 'seoul' || $campus === 'global') && $placeId.matches(/^[0-9]+$/)",
+            ".validate": "!newData.exists() || (newData.hasChildren(['nickname', 'fairyColor', 'status', 'startedAt', 'expiresAt']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 1 && newData.child('nickname').val().length <= 12 && (newData.child('fairyColor').val() === 'pink' || newData.child('fairyColor').val() === 'mint' || newData.child('fairyColor').val() === 'sky' || newData.child('fairyColor').val() === 'lemon' || newData.child('fairyColor').val() === 'lilac') && (newData.child('status').val() === 'focus' || newData.child('status').val() === 'break' || newData.child('status').val() === 'leaving') && newData.child('startedAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() <= now + 14400000)",
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
