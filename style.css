@@ -1312,9 +1312,10 @@ body.is-night-mode .detail-refresh-hours-btn {
 }
 
 .custom-time-input {
-  flex-shrink: 0;
-  min-width: 112px;
-  width: auto;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  min-width: 136px !important;
+  width: auto !important;
   height: 31px;
   padding: 0 10px;
   border-radius: var(--radius-pill);
@@ -3090,12 +3091,30 @@ body.is-night-mode .fairy-nav-voice-btn {
   color: #E0E7FF;
 }
 
-body.is-night-mode .unified-search-trigger-btn.has-active {
+body.is-night-mode .unified-search-trigger-btn.has-active,
+body.is-night-mode .unified-search-box.has-active,
+body.is-night-mode .unified-filter-modal-btn.has-active {
   background: linear-gradient(135deg, rgba(30, 27, 75, 0.92) 0%, rgba(49, 16, 66, 0.88) 100%);
   border-color: #818CF8;
 }
 
-body.is-night-mode .unified-search-trigger-btn.has-active .unified-search-placeholder {
+body.is-night-mode .unified-search-box,
+body.is-night-mode .unified-filter-modal-btn {
+  background: #1E293B;
+  border-color: #475569;
+  color: #F8FAFC;
+}
+
+body.is-night-mode .top-quick-search-input {
+  color: #F8FAFC;
+}
+
+body.is-night-mode .top-quick-search-input::placeholder {
+  color: #94A3B8;
+}
+
+body.is-night-mode .unified-search-trigger-btn.has-active .unified-search-placeholder,
+body.is-night-mode .unified-filter-modal-btn .unified-search-placeholder {
   color: #E0E7FF;
 }
 
@@ -3799,6 +3818,77 @@ body.is-fairy-nav-mode .fairy-step-ctrl-btn {
   gap: 6px;
 }
 
+.unified-search-box {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 8px 0 11px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid #CBD5E1;
+  background: var(--bg-warm);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  transition: all var(--transition-fast);
+}
+
+.unified-search-box:focus-within,
+.unified-search-box.has-active {
+  border-color: #6366F1;
+  background: linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 100%);
+  box-shadow: 0 3px 10px rgba(99, 102, 241, 0.14);
+}
+
+.top-quick-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.top-quick-search-input::placeholder {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.top-quick-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.unified-filter-modal-btn {
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 11px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid #C7D2FE;
+  background: linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 100%);
+  color: #3730A3;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.08);
+  transition: all var(--transition-fast);
+}
+
+.unified-filter-modal-btn.has-active {
+  border-color: #6366F1;
+  background: var(--gemini-grad);
+  color: #FFFFFF;
+}
+
+.unified-filter-modal-btn.has-active .unified-search-placeholder {
+  color: #FFFFFF !important;
+}
+
 .unified-search-trigger-btn {
   flex: 1;
   min-width: 0;
@@ -3827,14 +3917,10 @@ body.is-fairy-nav-mode .fairy-step-ctrl-btn {
 }
 
 .unified-search-placeholder {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  color: inherit;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .unified-search-trigger-btn.has-active .unified-search-placeholder {
@@ -3843,37 +3929,41 @@ body.is-fairy-nav-mode .fairy-step-ctrl-btn {
 }
 
 .unified-search-badge {
-  padding: 2px 7px;
+  padding: 1.5px 6px;
   border-radius: var(--radius-pill);
   background: var(--gemini-grad);
   color: #FFFFFF;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 800;
   flex-shrink: 0;
 }
 
+.unified-filter-modal-btn.has-active .unified-search-badge {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 .unified-search-reset-btn {
-  width: 34px;
-  height: 34px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  border: 1px solid var(--border-color);
-  background: var(--bg-warm);
+  border: none;
+  background: rgba(148, 163, 184, 0.24);
   color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-/* 검색창 아래 필터 칩 한 줄 (선택된 칩만 색으로 표시) */
+/* 검색창 아래 필터 칩 한 줄 (선택된 칩만 색으로 표시, 직접 시간 선택 시 줄바꿈 허용으로 절대 잘리지 않게 처리) */
 .quick-filter-chip-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  overflow-x: visible;
 }
 
 .quick-filter-chip-row::-webkit-scrollbar {
