@@ -1843,85 +1843,216 @@ body.is-night-mode .detail-refresh-hours-btn {
   color: var(--gemini-accent-text);
 }
 
-/* 3D 요정 길안내 + 네이버 지도·후기 + 카카오맵·후기 액션 블록 */
+/* 3D 요정 길안내 + 나 여기서 공부 중 (양옆 2열) + 네이버·카카오맵 통합 허브 */
 .detail-navigation-hub {
   margin-top: 12px;
-  padding: 12px;
+  padding: 10px;
   border-radius: 16px;
   background: linear-gradient(135deg, #F3F6FF 0%, #F7F2FF 52%, #FFF3F6 100%);
-  border: 1.5px solid rgba(124, 92, 255, 0.26);
+  border: 1.5px solid rgba(124, 92, 255, 0.24);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.fairy-route-cta-btn {
-  width: 100%;
-  min-height: 54px;
-  padding: 8px 14px;
-  border-radius: 14px;
-  background: var(--gemini-grad);
-  color: #FFFFFF;
-  box-shadow: 0 6px 18px rgba(124, 92, 255, 0.34);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  text-align: left;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+body.is-night-mode .detail-navigation-hub {
+  background: linear-gradient(135deg, rgba(22, 30, 48, 0.96) 0%, rgba(36, 30, 74, 0.92) 100%);
+  border-color: rgba(139, 92, 246, 0.38);
 }
 
-.fairy-route-cta-btn:active {
-  transform: scale(0.98);
+.detail-dual-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: stretch;
 }
 
-.fairy-route-cta-left {
+.detail-dual-action-grid.single-col {
+  grid-template-columns: 1fr;
+}
+
+.detail-checkin-mount-cell {
   display: flex;
-  align-items: center;
-  gap: 10px;
   min-width: 0;
 }
 
-.fairy-route-btn-img {
-  width: 44px;
-  height: 40px;
-  object-fit: contain;
-  flex-shrink: 0;
-  filter: drop-shadow(0 3px 8px rgba(17, 24, 39, 0.32));
-}
-
-.fairy-route-cta-text-col {
+/* 왼쪽: 길 안내 받기 비주얼 카드 & 오른쪽: 나 여기서 공부 중 비주얼 카드 */
+.fairy-route-cta-btn,
+.fairy-checkin-seat-card {
+  position: relative;
+  width: 100%;
+  min-height: 98px;
+  padding: 9px 10px 10px;
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  text-align: center;
+  overflow: hidden;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
-.fairy-route-cta-title {
-  font-size: 14.5px;
-  font-weight: 800;
+.fairy-route-cta-btn {
+  background: linear-gradient(145deg, #5B5EF4 0%, #7C5CFF 52%, #9B6BFF 100%);
   color: #FFFFFF;
-  letter-spacing: -0.01em;
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.30);
 }
 
-.fairy-route-cta-sub {
-  font-size: 12px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.92);
+.fairy-checkin-seat-card {
+  background: linear-gradient(145deg, #FFFFFF 0%, #FDF4FF 55%, #FFF1F5 100%);
+  border: 1.5px solid rgba(168, 85, 247, 0.36);
+  color: #1E1B4B;
+  box-shadow: 0 5px 14px rgba(168, 85, 247, 0.14);
 }
 
-.fairy-route-cta-arrow {
+.fairy-checkin-seat-card.is-checked-in {
+  background: linear-gradient(145deg, #FDF2F8 0%, #F3E8FF 52%, #E0E7FF 100%);
+  border: 1.5px solid #8B5CF6;
+  box-shadow: 0 6px 18px rgba(139, 92, 246, 0.26);
+}
+
+body.is-night-mode .fairy-checkin-seat-card {
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.96) 0%, rgba(59, 39, 108, 0.88) 100%);
+  border-color: rgba(168, 85, 247, 0.48);
+  color: #F8FAFC;
+}
+
+body.is-night-mode .fairy-checkin-seat-card.is-checked-in {
+  background: linear-gradient(145deg, rgba(76, 29, 149, 0.85) 0%, rgba(49, 46, 129, 0.92) 100%);
+  border-color: #A78BFA;
+}
+
+.fairy-route-cta-btn:active,
+.fairy-checkin-seat-card:active {
+  transform: scale(0.97);
+}
+
+/* 카드 상단 미니 캡슐 배지 */
+.dual-card-top-badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 5px 10px;
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.22);
-  font-size: 12px;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
   font-weight: 700;
-  color: #FFFFFF;
+  line-height: 1.25;
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dual-card-top-badge.route-badge {
+  background: rgba(255, 255, 255, 0.20);
+  color: #FFFFFF;
+}
+
+.dual-card-top-badge.checkin-empty-badge {
+  background: rgba(168, 85, 247, 0.12);
+  color: #7E22CE;
+}
+
+body.is-night-mode .dual-card-top-badge.checkin-empty-badge {
+  background: rgba(168, 85, 247, 0.25);
+  color: #E9D5FF;
+}
+
+.dual-card-top-badge.checkin-live-badge {
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+}
+
+body.is-night-mode .dual-card-top-badge.checkin-live-badge {
+  background: rgba(16, 185, 129, 0.25);
+  color: #6EE7B7;
+}
+
+/* 요정 캐릭터 스테이지 (앉아있는 방석 & 날아가는 홀로그램) */
+.dual-card-fairy-stage {
+  position: relative;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1px 0;
+}
+
+.fairy-seat-cushion {
+  position: absolute;
+  bottom: 0;
+  width: 36px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(168, 85, 247, 0.42) 0%, rgba(236, 72, 153, 0.18) 68%, transparent 100%);
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.28);
+}
+
+.fairy-seat-cushion.is-active {
+  width: 42px;
+  height: 12px;
+  background: radial-gradient(ellipse at center, rgba(139, 92, 246, 0.68) 0%, rgba(236, 72, 153, 0.38) 70%, transparent 100%);
+  animation: seatCushionPulse 2.2s ease-in-out infinite;
+}
+
+@keyframes seatCushionPulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+.fairy-route-btn-img,
+.fairy-seat-avatar-img {
+  width: 40px;
+  height: 36px;
+  object-fit: contain;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 3px 6px rgba(17, 24, 39, 0.22));
+}
+
+.fairy-seat-me-pill {
+  position: absolute;
+  top: -3px;
+  right: -10px;
+  z-index: 2;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #6366F1, #EC4899);
+  color: #FFFFFF;
+  font-size: 9.5px;
+  font-weight: 800;
+  box-shadow: 0 2px 5px rgba(99, 102, 241, 0.35);
+}
+
+/* 양옆 카드 하단 타이틀 & 서브텍스트 */
+.dual-card-text-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  width: 100%;
+}
+
+.dual-card-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.dual-card-sub {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.86;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* 외부 링크 버튼 줄 (네이버 지도·후기, 카카오맵·후기) */
@@ -5018,121 +5149,76 @@ body.is-night-mode .card-live-checkin-line {
   box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
 }
 
-/* 6) 카페 상세 시트 내 "나 여기서 공부 중" 체크인 허브 */
-.detail-checkin-hub {
-  margin-top: 10px;
-  padding: 11px 12px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(238, 242, 255, 0.85) 0%, rgba(253, 242, 248, 0.85) 100%);
-  border: 1.5px solid rgba(139, 92, 246, 0.28);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-body.is-night-mode .detail-checkin-hub {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.92) 0%, rgba(49, 46, 129, 0.65) 100%);
-  border-color: rgba(139, 92, 246, 0.45);
-}
-
-.detail-checkin-top-row {
+/* 6) 카페 상세 시트 내 "나 여기서 공부 중" 컴팩트 상태 팝오버 바 */
+.checkin-mini-live-strip {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.detail-checkin-live-count {
-  display: inline-flex;
-  align-items: center;
+  justify-content: center;
   gap: 6px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.detail-checkin-edit-profile-btn {
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-body.is-night-mode .detail-checkin-edit-profile-btn {
-  background: rgba(15, 23, 42, 0.75);
-  color: #CBD5E1;
-}
-
-.btn-start-checkin-cta {
-  width: 100%;
-  min-height: 44px;
-  padding: 8px 14px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 52%, #EC4899 100%);
-  color: #FFFFFF;
-  font-size: 13.5px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.32);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.btn-start-checkin-cta:active {
-  transform: scale(0.98);
-}
-
-.btn-start-checkin-left {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-start-checkin-sub {
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.10);
+  color: #065F46;
   font-size: 11.5px;
   font-weight: 600;
-  opacity: 0.92;
 }
 
-/* 체크인 완료 상태 컨트롤 (집중 중 / 잠깐 휴식 / 곧 나가요 + 공부 끝) */
-.checkin-active-status-box {
+body.is-night-mode .checkin-mini-live-strip {
+  background: rgba(16, 185, 129, 0.18);
+  color: #A7F3D0;
+}
+
+.checkin-compact-popover {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(139, 92, 246, 0.28);
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
 }
 
-.checkin-active-my-header {
+body.is-night-mode .checkin-compact-popover {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(139, 92, 246, 0.42);
+}
+
+.checkin-Status-bar-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
-.checkin-my-avatar-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.checkin-my-avatar-summary img {
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
-}
-
-.checkin-remain-time-text {
-  font-size: 11px;
+.checkin-popover-who {
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkin-popover-who strong {
+  color: var(--text-primary);
+  font-weight: 800;
+}
+
+.checkin-gear-btn {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.10);
+  color: #6D28D9;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+body.is-night-mode .checkin-gear-btn {
+  background: rgba(139, 92, 246, 0.25);
+  color: #DDD6FE;
 }
 
 .checkin-status-chip-row {
@@ -5142,10 +5228,10 @@ body.is-night-mode .detail-checkin-edit-profile-btn {
 }
 
 .checkin-status-chip {
-  min-height: 34px;
+  min-height: 32px;
   padding: 0 6px;
-  border-radius: 10px;
-  border: 1.5px solid var(--border-color);
+  border-radius: 9px;
+  border: 1px solid var(--border-color);
   background: var(--bg-white);
   color: var(--text-primary);
   font-size: 11.5px;
