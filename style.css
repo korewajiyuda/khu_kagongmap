@@ -1685,19 +1685,25 @@ body.is-night-mode .detail-refresh-hours-btn {
 }
 
 .hero-glass-back-btn {
-  min-height: 36px;
-  padding: 0 12px 0 9px;
-  border-radius: var(--radius-pill);
-  background: rgba(15, 18, 34, 0.58);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(15, 18, 34, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 255, 255, 0.34);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 13px;
-  font-weight: 700;
+  justify-content: center;
   color: #FFFFFF;
+  flex-shrink: 0;
+  transition: transform 0.14s ease, background 0.15s ease;
+}
+.hero-glass-back-btn:active {
+  transform: scale(0.92);
+  background: rgba(15, 18, 34, 0.88);
 }
 
 .hero-top-right-group {
@@ -5378,6 +5384,83 @@ body.is-night-mode .checkin-status-chip.is-end-btn {
   height: 100%;
   object-fit: contain;
 }
+
+/* =========================================================
+   9) 네이티브 앱 스타일 큰 뒤로가기 화살표 버튼 (←) & A2HS 공유 아이콘 배지
+   ========================================================= */
+.universal-big-back-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-white);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.universal-big-back-btn:hover {
+  border-color: #6366F1;
+  color: #4F46E5;
+}
+
+.universal-big-back-btn:active {
+  transform: scale(0.92);
+}
+
+.universal-sheet-back-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
+.unified-sheet-title-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ai-result-back-arrow-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1.5px solid rgba(99, 102, 241, 0.28);
+  background: var(--bg-white);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.1);
+  transition: transform 0.12s ease, border-color 0.15s ease;
+}
+
+.ai-result-back-arrow-btn:active {
+  transform: scale(0.92);
+}
+
+.a2hs-inline-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  margin: 0 2px;
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.1);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  color: #2563EB;
+  font-size: 12px;
+  font-weight: 800;
+  vertical-align: middle;
+}
+
 
 
 

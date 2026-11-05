@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
   <!-- App Stylesheet -->
-  <link rel="stylesheet" href="./style.css?v=20261105_4" />
+  <link rel="stylesheet" href="./style.css?v=20261105_5" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -98,7 +98,7 @@
             </svg>
           </button>
 
-          <!-- 헤더 메뉴 드롭다운 (최신 영업정보 갱신, 공유, 홈 화면 추가, 카페 건의, Google AI Pro 학생 혜택) -->
+          <!-- 헤더 메뉴 드롭다운 (최신 영업정보 갱신, 공유, 홈 화면 추가, 카페 건의, Google AI Plus 학생 혜택) -->
           <div class="header-menu-dropdown hidden" id="headerMenuDropdown" role="menu" aria-label="서비스 메뉴">
             <button type="button" class="menu-item-btn" id="btnMenuRefreshLive" role="menuitem" aria-label="최신 영업정보 일괄 갱신">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -133,11 +133,11 @@
               </svg>
               <span>새 카페 건의하기</span>
             </button>
-            <button type="button" class="menu-item-btn" id="btnMenuOffer" role="menuitem" aria-label="Google AI Pro 학생 혜택 안내 보기">
+            <button type="button" class="menu-item-btn" id="btnMenuOffer" role="menuitem" aria-label="Google AI Plus 학생 혜택 안내 보기">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"></path>
               </svg>
-              <span>Google AI Pro 학생 혜택</span>
+              <span>Google AI Plus 학생 혜택</span>
             </button>
             <button type="button" class="menu-item-btn" id="btnMenuGeminiKey" role="menuitem" aria-label="Gemini API 키 연동 설정">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -153,6 +153,18 @@
     <!-- 상단 컨트롤 패널: 1) 통합 검색창 하나 (제발요 세 마리 포함) + 2) 검색창 아래 필터 칩 한 줄 (선택된 칩만 색 표시) -->
     <section class="top-control-panel" id="topControlPanel" aria-label="통합 검색 및 빠른 필터">
       <div class="unified-search-row">
+        <button
+          type="button"
+          class="universal-big-back-btn hidden"
+          id="btnTopSearchBack"
+          aria-label="이전 화면으로 돌아가기"
+          title="이전으로 돌아가기"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
         <form class="unified-search-box" id="topQuickSearchForm" role="search" aria-label="카페 이름 및 조건 직접 검색">
           <img
             src="./assets/fairy/fairy-trio.webp?v=20261102_6"
@@ -299,10 +311,10 @@
             </div>
           </div>
 
-          <!-- 첫 방문 때만 닫을 수 있는 작은 알림 1회 표시 (Google AI Pro 혜택 & 카페 건의 안내) -->
+          <!-- 첫 방문 때만 닫을 수 있는 작은 알림 1회 표시 (Google AI Plus 혜택 & 카페 건의 안내) -->
           <div class="first-visit-mini-toast hidden" id="firstVisitMiniToast" role="status">
             <button type="button" class="first-visit-toast-text-btn" id="btnFirstVisitOpenOffer">
-              <span>🎁 경희대생 Google AI Pro 무료 혜택·카페 건의는 목록 맨 아래나 메뉴(☰)에 있어요</span>
+              <span>🎁 경희대생 Google AI Plus 무료 혜택·카페 건의는 목록 맨 아래나 메뉴(☰)에 있어요</span>
             </button>
             <button type="button" class="first-visit-toast-close" id="btnDismissFirstVisitToast" aria-label="알림 닫기">✕</button>
           </div>
@@ -318,7 +330,15 @@
         <div class="unified-sheet-drag-header" id="unifiedSheetDragHeader" role="button" tabindex="0" aria-label="패널을 위아래로 움직여 지도 또는 목록 크기 조절">
           <div class="sheet-handle-bar"></div>
           <div class="unified-sheet-title-row">
-            <h2 class="unified-sheet-title" id="resultCountSummary">카페 0곳 · 영업 중 0</h2>
+            <div class="unified-sheet-title-left">
+              <button type="button" class="universal-big-back-btn hidden" id="btnSheetHeaderBack" aria-label="이전 화면으로 돌아가기" title="이전으로 돌아가기">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+              </button>
+              <h2 class="unified-sheet-title" id="resultCountSummary">카페 0곳 · 영업 중 0</h2>
+            </div>
             <button type="button" class="unified-sheet-snap-btn" id="btnToggleSheetSnap" aria-label="목록 펼치거나 내려서 지도 보기">
               <span id="sheetSnapBtnLabel">올리면 목록 ▲</span>
             </button>
@@ -338,7 +358,7 @@
             <!-- 카페 카드 목록 -->
             <div class="place-card-list" id="placeListContainer" role="list"></div>
 
-            <!-- 목록 맨 끝에 배치된 카페 건의 & Google AI Pro 학생 무료 혜택 카드 -->
+            <!-- 목록 맨 끝에 배치된 카페 건의 & Google AI Plus 학생 무료 혜택 카드 -->
             <div class="list-end-footer-cards">
               <button type="button" class="list-end-action-card" id="btnOpenSuggestCafe">
                 <div class="list-end-card-text">
@@ -349,7 +369,7 @@
               </button>
               <button type="button" class="list-end-action-card is-offer-card" id="btnOpenOfferFromList">
                 <div class="list-end-card-text">
-                  <strong>✨ 경희대생 Google AI Pro 1년 무료 혜택</strong>
+                  <strong>✨ 경희대생 Google AI Plus 1년 무료 혜택</strong>
                   <span>학교 이메일(@khu.ac.kr) 인증 가이드 및 오류 해결</span>
                 </div>
                 <span class="list-end-arrow" aria-hidden="true">›</span>
@@ -494,11 +514,11 @@
       </div>
     </div>
 
-    <!-- Google AI Pro 학생 혜택 및 오류 해결 가이드 시트 (제품명 Google AI Pro로 통일) -->
+    <!-- Google AI Plus 학생 혜택 및 오류 해결 가이드 시트 (제품명 Google AI Plus로 통일) -->
     <div class="modal-backdrop hidden" id="geminiOfferModal" role="dialog" aria-modal="true" aria-labelledby="offerSheetTitle">
       <div class="modal-sheet">
         <div class="modal-header">
-          <h2 class="modal-title" id="offerSheetTitle">경희대생 Google AI Pro 1년 무료 혜택</h2>
+          <h2 class="modal-title" id="offerSheetTitle">경희대생 Google AI Plus 1년 무료 혜택</h2>
           <button type="button" class="icon-btn" id="btnCloseOfferSheet" aria-label="혜택 안내 닫기">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -506,7 +526,7 @@
             </svg>
           </button>
         </div>
-        <p class="modal-subtitle">학교 이메일(@khu.ac.kr) 학생 인증으로 Google AI Pro 요금제를 1년간 무료로 이용할 수 있어요.</p>
+        <p class="modal-subtitle">학교 이메일(@khu.ac.kr) 학생 인증으로 Google AI Plus 요금제를 1년간 무료로 이용할 수 있어요.</p>
 
         <a
           href="https://gemini.google/students/?utm_source=student&utm_medium=social&utm_campaign=microsite_campus_kyunghee-ambassador&utm_content=seoul_kagong"
@@ -514,9 +534,9 @@
           rel="noopener noreferrer"
           class="modal-primary-btn offer-link-btn"
           id="geminiCtaLink"
-          aria-label="Google AI Pro 학생 혜택 신청 페이지 새 창 열기"
+          aria-label="Google AI Plus 학생 혜택 신청 페이지 새 창 열기"
         >
-          <span>Google AI Pro 1년 무료 신청하기</span>
+          <span>Google AI Plus 1년 무료 신청하기</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <line x1="7" y1="17" x2="17" y2="7"></line>
             <polyline points="7 7 17 7 17 17"></polyline>
@@ -582,8 +602,16 @@
         </div>
         <p class="modal-subtitle" id="a2hsSubtitle">시험기간·공강 때마다 앱처럼 바로 열어 내 주변 카공 카페를 확인할 수 있어요.</p>
         <div class="a2hs-body" id="a2hsInstructionBody"></div>
-        <div class="a2hs-actions">
-          <button type="button" class="modal-primary-btn" id="btnA2HSCopyLink" aria-label="카공맵 주소 복사하기">카공맵 링크 복사하기</button>
+        <div class="a2hs-actions report-actions-stack">
+          <button type="button" class="modal-primary-btn" id="btnA2HSNativeShare" aria-label="공유 시트 열어서 홈 화면에 추가하기">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+              <polyline points="16 6 12 2 8 6"></polyline>
+              <line x1="12" y1="2" x2="12" y2="15"></line>
+            </svg>
+            <span>공유 메뉴 열기 (홈 화면에 추가)</span>
+          </button>
+          <button type="button" class="secondary-sheet-btn" id="btnA2HSCopyLink" aria-label="카공맵 주소 복사하기">카공맵 링크 복사하기</button>
         </div>
       </div>
     </div>
@@ -795,8 +823,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-  <script src="./firebase-config.js?v=20261105_4"></script>
-  <script src="./hours.js?v=20261105_4"></script>
-  <script src="./app.js?v=20261105_4"></script>
+  <script src="./firebase-config.js?v=20261105_5"></script>
+  <script src="./hours.js?v=20261105_5"></script>
+  <script src="./app.js?v=20261105_5"></script>
 </body>
 </html>

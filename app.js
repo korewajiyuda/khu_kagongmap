@@ -12,7 +12,7 @@
 // 1. 핵심 설정 상수
 const GOOGLE_SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/1td87-lDak8Cj8abo_qKMiARD8rXJ14Mwr4g3rknZJLU/export?format=csv";
-const LOCAL_CSV_URL = "./data.csv?v=20261105_4";
+const LOCAL_CSV_URL = "./data.csv?v=20261105_5";
 const CANONICAL_SERVICE_URL = "https://korewajiyuda.github.io/khu_kagongmap/";
 const GEMINI_BASE_URL =
   "https://gemini.google/students/?utm_source=student&utm_medium=social&utm_campaign=microsite_campus_kyunghee-ambassador";
@@ -1686,12 +1686,14 @@ function applyAiPromptRecommendation(rawPrompt, fromUrl = false) {
   const greetingImg = document.getElementById("greetingFairyImg");
   if (greetingImg) triggerFairySparkleAndHop(greetingImg);
   if (!fromUrl) {
+    ensureBackHistoryGuard("search_query");
     showToast(
       isDirectCafeSearch
         ? `🔎 '${directNameMatches[0].name}' 검색 결과를 찾았어요!`
         : "🧚 질문에 맞는 카공 카드·조건을 자동 선택해 TOP 추천을 띄웠어요!"
     );
   }
+  syncUniversalBackButtons();
 }
 
 const GEMINI_KEY_STORAGE = "khu_gemini_api_key_v1";
@@ -1871,13 +1873,26 @@ function renderAiPromptResultBox(refDate) {
     box.innerHTML = `
       <div class="ai-prompt-result-header">
         <div class="ai-prompt-title-group">
-          <img src="./assets/fairy/fairy-trio.webp?v=20261102_6" alt="제발요" class="ai-result-trio-img" width="34" height="22" />
+          <button type="button" class="ai-result-back-arrow-btn" id="btnBackClearSearch" aria-label="이전 화면으로 돌아가기" title="검색·필터 해제하고 돌아가기">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+          </button>
           <span class="ai-prompt-badge">제발요 추천</span>
           <span class="ai-prompt-summary-text">조건에 맞는 카페를 찾지 못했어요. 다른 조건으로 검색해 보세요!</span>
         </div>
       </div>
     `;
     box.classList.remove("hidden");
+    const btnBackEmpty = document.getElementById("btnBackClearSearch");
+    if (btnBackEmpty) {
+      btnBackEmpty.addEventListener("click", () => {
+        if (typeof handleUniversalAppBack === "function") {
+          handleUniversalAppBack();
+        }
+      });
+    }
     return;
   }
 
@@ -1885,16 +1900,6 @@ function renderAiPromptResultBox(refDate) {
     hasPrompt && intent.reasons.length > 0
       ? `${intent.reasons.join(" · ")} 맞춤 추천`
       : `"${escapeHtmlSafe(effectiveQuery)}" 추천 TOP ${topPicks.length}`;
-
-  const conversationalText = buildConversationalFairyReply(
-    effectiveQuery,
-    intent,
-    topPicks
-  );
-  const hasGeminiKey = Boolean(getStoredGeminiApiKey());
-  const engineTagLabel = hasGeminiKey
-    ? "⚡ Gemini 2.5 Flash 연동"
-    : "💬 제발요 대화형 브리핑";
 
   const picksHtml = topPicks
     .map((item, idx) => {
@@ -1916,26 +1921,30 @@ function renderAiPromptResultBox(refDate) {
   box.innerHTML = `
     <div class="ai-prompt-result-header">
       <div class="ai-prompt-title-group">
-        <img src="./assets/fairy/fairy-trio.webp?v=20261102_6" alt="제발요" class="ai-result-trio-img" width="34" height="22" />
+        <button type="button" class="ai-result-back-arrow-btn" id="btnBackClearSearch" aria-label="이전 화면으로 돌아가기" title="검색·필터 해제하고 돌아가기">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
         <span class="ai-prompt-badge">제발요 추천</span>
         <span class="ai-prompt-summary-text">${reasonSummary}</span>
-        <span class="ai-engine-mode-tag" id="aiEngineModeTag">${engineTagLabel}</span>
       </div>
       <button type="button" class="ai-prompt-share-btn" id="btnShareAiPrompt" title="추천 링크 복사" aria-label="추천 링크 복사">
         <span aria-hidden="true">🔗</span>
       </button>
     </div>
-    <div class="ai-conversational-bubble" id="aiConversationalBubble">
-      <p class="ai-conversational-text" id="aiConversationalBubbleText">${escapeHtmlSafe(
-        conversationalText
-      )}</p>
-    </div>
     <div class="ai-pick-chips-row">${picksHtml}</div>
   `;
   box.classList.remove("hidden");
 
-  if (hasGeminiKey) {
-    requestRealGeminiConversationalReply(effectiveQuery, topPicks);
+  const btnBackClear = document.getElementById("btnBackClearSearch");
+  if (btnBackClear) {
+    btnBackClear.addEventListener("click", () => {
+      if (typeof handleUniversalAppBack === "function") {
+        handleUniversalAppBack();
+      }
+    });
   }
 
   box.querySelectorAll("[data-ai-pick-id]").forEach((btn) => {
@@ -2100,6 +2109,147 @@ function updateMoodCardsInPlace(refDate) {
   if (btnInlineReset) {
     btnInlineReset.classList.toggle("hidden", !hasAnyActiveSearch);
   }
+  syncUniversalBackButtons();
+}
+
+// =========================================================
+// 13-B. 전 화면 공통 큰 뒤로가기 화살표(←) + 브라우저 하단 뒤로가기(Safari / 갤럭시) History API 연동
+// =========================================================
+let _isHandlingPopState = false;
+let _pushedHistoryDepth = 0;
+
+function hasActiveSearchOrFilterState() {
+  return (
+    Boolean(state.aiPromptQuery && state.aiPromptQuery.trim()) ||
+    Boolean(state.selectedMood) ||
+    state.selectedDetails.size > 0
+  );
+}
+
+function getOpenModalElement() {
+  const modalIds = [
+    "checkinSetupModal",
+    "detailFilterModal",
+    "geminiOfferModal",
+    "a2hsModal",
+    "reportModal",
+    "suggestCafeModal",
+  ];
+  for (const id of modalIds) {
+    const el = document.getElementById(id);
+    if (el && !el.classList.contains("hidden")) {
+      return el;
+    }
+  }
+  return null;
+}
+
+function hasAnyDeepNavigationLayer() {
+  return (
+    Boolean(getOpenModalElement()) ||
+    Boolean(currentFairyNavSession) ||
+    state.selectedPlaceId !== null ||
+    hasActiveSearchOrFilterState() ||
+    state.sheetState === "full"
+  );
+}
+
+function ensureBackHistoryGuard(layerTag = "layer") {
+  if (_isHandlingPopState) return;
+  if (typeof window === "undefined" || !window.history || !window.history.pushState) return;
+  try {
+    window.history.pushState(
+      { khuBackGuard: true, layer: layerTag, ts: Date.now() },
+      "",
+      window.location.href
+    );
+    _pushedHistoryDepth += 1;
+  } catch (_e) {}
+}
+
+function syncUniversalBackButtons() {
+  const hasSearch = hasActiveSearchOrFilterState();
+  const hasDetailOrNav = Boolean(currentFairyNavSession) || state.selectedPlaceId !== null;
+  const isFullSheet = state.sheetState === "full";
+
+  const btnTopSearchBack = document.getElementById("btnTopSearchBack");
+  if (btnTopSearchBack) {
+    btnTopSearchBack.classList.toggle("hidden", !(hasSearch || hasDetailOrNav));
+  }
+
+  const btnSheetHeaderBack = document.getElementById("btnSheetHeaderBack");
+  if (btnSheetHeaderBack) {
+    btnSheetHeaderBack.classList.toggle("hidden", !(hasSearch || isFullSheet));
+  }
+}
+
+function clearAllActiveSearchAndFilters() {
+  state.selectedMood = null;
+  state.selectedDetails.clear();
+  state.aiPromptQuery = "";
+  const inputEl = document.getElementById("aiPromptInput");
+  if (inputEl) inputEl.value = "";
+  const topInputEl = document.getElementById("topQuickSearchInput");
+  if (topInputEl) topInputEl.value = "";
+  const clearBtn = document.getElementById("btnClearAiPrompt");
+  if (clearBtn) clearBtn.classList.add("hidden");
+  renderAll(false);
+}
+
+function stepBackOneLayer(fromPopState = false) {
+  // 1순위: 열려 있는 모달/팝업 창 닫기
+  const openModal = getOpenModalElement();
+  if (openModal) {
+    openModal.classList.add("hidden");
+    syncUniversalBackButtons();
+    if (fromPopState && hasAnyDeepNavigationLayer()) {
+      ensureBackHistoryGuard("remain_after_modal");
+    }
+    return true;
+  }
+
+  // 2순위: 요정 도보 길안내 중이면 상세 시트로 돌아가기
+  if (currentFairyNavSession) {
+    stopFairyNavigation(true);
+    syncUniversalBackButtons();
+    if (fromPopState && hasAnyDeepNavigationLayer()) {
+      ensureBackHistoryGuard("remain_after_nav");
+    }
+    return true;
+  }
+
+  // 3순위: 카페 상세 시트가 열려 있으면 닫고 이전 지도/목록으로 돌아가기
+  if (state.selectedPlaceId !== null) {
+    closePlaceDetail();
+    syncUniversalBackButtons();
+    if (fromPopState && hasAnyDeepNavigationLayer()) {
+      ensureBackHistoryGuard("remain_after_detail");
+    }
+    return true;
+  }
+
+  // 4순위: 검색어나 카공카드·세부조건 필터가 켜져 있으면 초기화하고 전체 지도로 돌아가기
+  if (hasActiveSearchOrFilterState()) {
+    clearAllActiveSearchAndFilters();
+    if (state.sheetState === "full") {
+      setSheetSnapMode("half");
+    }
+    syncUniversalBackButtons();
+    return true;
+  }
+
+  // 5순위: 바텀시트가 전체화면(full)으로 올라와 있으면 반열림(half) 지도로 내리기
+  if (state.sheetState === "full") {
+    setSheetSnapMode("half");
+    syncUniversalBackButtons();
+    return true;
+  }
+
+  return false;
+}
+
+function handleUniversalAppBack() {
+  stepBackOneLayer(false);
 }
 
 function mountDetailChipsOnce() {
@@ -2284,7 +2434,7 @@ function renderControlsAndGreeting(displayedPlaces, refDate) {
     }
   }
 
-  // Google AI Pro 링크 캠퍼스 UTM 업데이트
+  // Google AI Plus 링크 캠퍼스 UTM 업데이트
   const ctaLink = document.getElementById("geminiCtaLink");
   if (ctaLink) {
     ctaLink.href = `${GEMINI_BASE_URL}&utm_content=${state.campus}_kagong`;
@@ -2456,8 +2606,13 @@ function openPlaceDetail(placeId, panMap = true) {
   const rawPlace = activePlaces.find((p) => p.id === Number(placeId));
   if (!rawPlace) return;
 
+  const wasAlreadyOpen = state.selectedPlaceId === rawPlace.id;
   stopFairyNavigation(false);
   state.selectedPlaceId = rawPlace.id;
+  if (!wasAlreadyOpen && panMap) {
+    ensureBackHistoryGuard(`place_${rawPlace.id}`);
+  }
+  syncUniversalBackButtons();
 
   const effectiveAnchor = resolvePlaceEffectiveAnchor(rawPlace);
 
@@ -2529,12 +2684,11 @@ function openPlaceDetail(placeId, panMap = true) {
       <div class="detail-hero-aurora-glow" aria-hidden="true"></div>
 
       <div class="detail-hero-top-bar">
-        <button type="button" class="hero-glass-back-btn" id="btnBackToList" aria-label="목록으로 돌아가기">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <button type="button" class="hero-glass-back-btn" id="btnBackToList" aria-label="이전 화면으로 돌아가기" title="이전으로 돌아가기">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <line x1="19" y1="12" x2="5" y2="12"></line>
             <polyline points="12 19 5 12 12 5"></polyline>
           </svg>
-          <span>목록으로</span>
         </button>
 
         <div class="hero-top-right-group">
@@ -2804,12 +2958,12 @@ function openPlaceDetail(placeId, panMap = true) {
 
   const btnBack = document.getElementById("btnBackToList");
   if (btnBack) {
-    const backSpan = btnBack.querySelector("span");
-    if (backSpan) {
-      backSpan.textContent = state.activeMainView === "list" ? "목록으로" : "지도로";
-    }
     btnBack.addEventListener("click", () => {
-      closePlaceDetail();
+      if (typeof handleUniversalAppBack === "function") {
+        handleUniversalAppBack();
+      } else {
+        closePlaceDetail();
+      }
     });
   }
 
@@ -2959,6 +3113,7 @@ function closePlaceDetail() {
     sheet.classList.remove("is-fairy-nav");
   }
   highlightSelectedMarkerOnMap(null);
+  syncUniversalBackButtons();
 }
 
 // =========================================================
@@ -3514,6 +3669,7 @@ function stopFairyNavigation(returnToDetail = true) {
   }
   currentFairyNavSession = null;
   renderMapView(getSortedDisplayPlaces(getEffectiveReferenceDate()));
+  syncUniversalBackButtons();
   if (leafletMap) {
     setTimeout(() => leafletMap.invalidateSize(), 60);
   }
@@ -3846,14 +4002,17 @@ function renderFairyNavSheet() {
     <!-- 카카오맵·네이버지도 도보 길찾기 스타일 상단 요약 헤더 -->
     <div class="fairy-nav-header">
       <div class="fairy-nav-badge-title">
+        <button type="button" class="universal-big-back-btn" id="btnCloseFairyNav" aria-label="길안내 종료하고 이전 화면으로 돌아가기" title="상세정보로 돌아가기">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
         </svg>
         <span>도보 길찾기 · 제발요 네비게이션</span>
       </div>
-      <button type="button" class="fairy-nav-close-btn" id="btnCloseFairyNav" aria-label="길안내 종료하고 상세정보로 돌아가기">
-        <span>← 상세정보로</span>
-      </button>
     </div>
 
     <!-- 경로 옵션 탭 (추천경로 / 큰길우선 / 최단거리) + 출발지 전환 -->
@@ -4122,6 +4281,9 @@ async function startFairyNavigation(
       : effectiveCampusAnchor;
 
   // 제발요 길안내 시작 시 지도 탭으로 전환하되 closeDetail=false로 상세/네비 시트가 절대 닫히지 않게 유지!
+  if (!currentFairyNavSession) {
+    ensureBackHistoryGuard("fairy_nav");
+  }
   document.body.classList.add("is-fairy-nav-mode");
   setMainViewMode("map", "fairy_nav", false);
   const sheet = document.getElementById("mainBottomSheet");
@@ -4442,8 +4604,13 @@ function setSheetSnapMode(snapMode = "half") {
 
   const validSnap =
     snapMode === "peek" || snapMode === "full" ? snapMode : "half";
+  const prevSnap = state.sheetState;
   state.sheetState = validSnap;
   state.activeMainView = validSnap === "full" ? "list" : "map";
+  if (validSnap === "full" && prevSnap !== "full") {
+    ensureBackHistoryGuard("sheet_full");
+  }
+  syncUniversalBackButtons();
 
   listStage.classList.remove("snap-peek", "snap-half", "snap-full");
   listStage.classList.add(`snap-${validSnap}`);
@@ -4856,22 +5023,29 @@ function showA2HSPopup(forceInAppMode = false) {
   const titleEl = document.getElementById("a2hsTitle");
   const subtitleEl = document.getElementById("a2hsSubtitle");
   const bodyEl = document.getElementById("a2hsInstructionBody");
+  const nativeShareBtn = document.getElementById("btnA2HSNativeShare");
   if (!modal || !bodyEl) return;
 
   const inApp = forceInAppMode === true || isInAppBrowser();
+  const canWebShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  if (nativeShareBtn) {
+    nativeShareBtn.classList.toggle("hidden", inApp);
+  }
+
   if (inApp) {
     if (titleEl) {
-      titleEl.textContent = "외부 브라우저로 열면 더 편해요";
+      titleEl.textContent = "Safari · Chrome으로 열면 바로 추가돼요";
     }
     if (subtitleEl) {
       subtitleEl.textContent =
-        "인스타그램·카카오톡 인앱 브라우저에서는 내 위치 탐색과 홈 화면 추가가 제한될 수 있어요.";
+        "에브리타임·카카오톡·인스타그램 인앱 브라우저에서는 하단 공유 버튼이 보이지 않아요.";
     }
     bodyEl.innerHTML = `
       <ol class="a2hs-steps">
-        <li><span class="step-num">1</span><span>우측 상단 또는 하단의 <strong>메뉴(⋯)</strong> 버튼을 눌러주세요.</span></li>
-        <li><span class="step-num">2</span><span><strong>다른 브라우저로 열기(Safari / Chrome)</strong>를 선택해 주세요.</span></li>
-        <li><span class="step-num">3</span><span>브라우저 공유 메뉴에서 <strong>홈 화면에 추가</strong>를 누르면 바로가기가 만들어져요.</span></li>
+        <li><span class="step-num">1</span><span>화면 우측 하단 또는 상단의 <strong>메뉴(⋯ 또는 ⋮)</strong> 버튼을 눌러주세요.</span></li>
+        <li><span class="step-num">2</span><span><strong>Safari로 열기 / 다른 브라우저로 열기</strong>를 눌러주세요.</span></li>
+        <li><span class="step-num">3</span><span>열린 브라우저에서 아래 <strong>[공유 메뉴 열기]</strong> 버튼이나 <strong>홈 화면에 추가</strong>를 누르면 완료돼요!</span></li>
       </ol>
     `;
   } else {
@@ -4880,23 +5054,27 @@ function showA2HSPopup(forceInAppMode = false) {
       titleEl.textContent = "홈 화면에 카공맵 추가하기";
     }
     if (subtitleEl) {
-      subtitleEl.textContent =
-        "시험기간·공강 때마다 앱처럼 바로 열어 내 주변 카공 카페를 확인할 수 있어요.";
+      subtitleEl.textContent = isIOS
+        ? "Safari 하단 바가 안 보여도 아래 파란 버튼 하나로 바로 공유 메뉴를 열 수 있어요!"
+        : "시험기간·공강 때마다 앱처럼 바로 열어 내 주변 카공 카페를 확인할 수 있어요.";
     }
+    const shareIconInlineSvg = `<span class="a2hs-inline-icon-badge" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> 공유</span>`;
     bodyEl.innerHTML = isIOS
       ? `
       <ol class="a2hs-steps">
-        <li><span class="step-num">1</span><span>Safari 하단 바의 <strong>공유 버튼</strong>을 눌러주세요.</span></li>
-        <li><span class="step-num">2</span><span>메뉴에서 <strong>홈 화면에 추가</strong>를 선택하면 완료돼요.</span></li>
+        <li><span class="step-num">1</span><span>아래 파란색 <strong>[공유 메뉴 열기]</strong> 버튼을 누르거나, 화면 맨 아래 주소창을 한 번 터치해 나타나는 ${shareIconInlineSvg} 아이콘을 눌러주세요.</span></li>
+        <li><span class="step-num">2</span><span>열린 공유 메뉴를 살짝 위로 올려 <strong>「홈 화면에 추가 ⊞」</strong>를 누르면 완료돼요!</span></li>
       </ol>`
       : `
       <ol class="a2hs-steps">
-        <li><span class="step-num">1</span><span>브라우저 우측 상단 <strong>메뉴(⋮)</strong> 버튼을 눌러주세요.</span></li>
+        <li><span class="step-num">1</span><span>${canWebShare ? "아래 <strong>[공유 메뉴 열기]</strong> 또는 " : ""}브라우저 우측 상단·하단 <strong>메뉴(⋮ / ≡)</strong> 버튼을 눌러주세요.</span></li>
         <li><span class="step-num">2</span><span><strong>홈 화면에 추가</strong> 또는 <strong>앱 설치</strong>를 선택하면 완료돼요.</span></li>
       </ol>`;
   }
 
+  ensureBackHistoryGuard("a2hs_modal");
   modal.classList.remove("hidden");
+  syncUniversalBackButtons();
   trackEvent("a2hs_shown", { in_app: inApp });
 }
 
@@ -4924,7 +5102,9 @@ function openReportModal(place) {
   if (noteInput) {
     noteInput.value = "";
   }
+  ensureBackHistoryGuard("report_modal");
   modal.classList.remove("hidden");
+  syncUniversalBackButtons();
 }
 
 function openSuggestCafeModal() {
@@ -4945,7 +5125,9 @@ function openSuggestCafeModal() {
   if (metaInput) metaInput.value = "";
   if (revInput) revInput.value = "";
 
+  ensureBackHistoryGuard("suggest_modal");
   modal.classList.remove("hidden");
+  syncUniversalBackButtons();
   trackEvent("open_suggest_cafe_modal", { campus: state.campus });
 }
 
@@ -5047,7 +5229,7 @@ function bindEvents() {
     });
   }
 
-  // 메뉴 항목: 공유 / 홈 화면 추가 / Google AI Pro 혜택
+  // 메뉴 항목: 공유 / 홈 화면 추가 / Google AI Plus 혜택
   const btnMenuShare = document.getElementById("btnMenuShare");
   if (btnMenuShare) {
     btnMenuShare.addEventListener("click", () => copyShareLink());
@@ -5061,7 +5243,9 @@ function bindEvents() {
   const offerModal = document.getElementById("geminiOfferModal");
   const openOfferModal = (source) => {
     if (!offerModal) return;
+    ensureBackHistoryGuard("offer_modal");
     offerModal.classList.remove("hidden");
+    syncUniversalBackButtons();
     trackEvent("cta_click", {
       campus: state.campus,
       utm_content: `${state.campus}_kagong`,
@@ -5218,6 +5402,7 @@ function bindEvents() {
       }
 
       state.selectedMood = moodId;
+      ensureBackHistoryGuard(`mood_${moodId}`);
       closePlaceDetail();
       trackEvent("select_mood", { mood: moodId, count });
       renderAll(false);
@@ -5235,7 +5420,9 @@ function bindEvents() {
 
   if (btnOpenDetail && detailModal) {
     btnOpenDetail.addEventListener("click", () => {
+      ensureBackHistoryGuard("detail_filter_modal");
       detailModal.classList.remove("hidden");
+      syncUniversalBackButtons();
       const inputEl = document.getElementById("aiPromptInput");
       if (inputEl) {
         inputEl.value = state.aiPromptQuery || "";
@@ -5259,6 +5446,9 @@ function bindEvents() {
       if (remainCount === 0) {
         showToast("선택 시 조건에 맞는 카페가 0곳이 돼요.");
         return;
+      }
+      if (state.selectedDetails.size === 0 && !state.selectedMood && !state.aiPromptQuery) {
+        ensureBackHistoryGuard(`cond_${key}`);
       }
       state.selectedDetails.add(key);
     }
@@ -5302,7 +5492,11 @@ function bindEvents() {
 
     topQuickSearchInput.addEventListener("input", () => {
       const val = topQuickSearchInput.value.trim();
+      const wasEmpty = !state.aiPromptQuery || !state.aiPromptQuery.trim();
       state.aiPromptQuery = val;
+      if (wasEmpty && val) {
+        ensureBackHistoryGuard("quick_search");
+      }
       const modalInput = document.getElementById("aiPromptInput");
       if (modalInput && modalInput.value !== val) {
         modalInput.value = val;
@@ -5569,10 +5763,11 @@ function bindEvents() {
     });
   }
 
-  // A2HS 모달 닫기 및 복사
+  // A2HS 모달 닫기, 공유 메뉴 바로 열기(Safari 하단바 없어도 동작), 링크 복사
   const a2hsModal = document.getElementById("a2hsModal");
   const btnCloseA2HS = document.getElementById("btnCloseA2HS");
   const btnA2HSCopyLink = document.getElementById("btnA2HSCopyLink");
+  const btnA2HSNativeShare = document.getElementById("btnA2HSNativeShare");
   if (btnCloseA2HS && a2hsModal) {
     btnCloseA2HS.addEventListener("click", () =>
       a2hsModal.classList.add("hidden")
@@ -5581,9 +5776,55 @@ function bindEvents() {
       if (e.target === a2hsModal) a2hsModal.classList.add("hidden");
     });
   }
+  if (btnA2HSNativeShare) {
+    btnA2HSNativeShare.addEventListener("click", async () => {
+      const shareUrl = getCanonicalShareUrl();
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        try {
+          await navigator.share({
+            title: "경희대 카공맵",
+            text: "경희대 서울캠·국제캠 실시간 카공 카페 지도",
+            url: shareUrl,
+          });
+          trackEvent("a2hs_native_share_opened");
+          return;
+        } catch (err) {
+          if (err && err.name === "AbortError") return;
+        }
+      }
+      await copyShareLink();
+      showToast("링크가 복사되었어요! 브라우저 주소창이나 메뉴에서 홈 화면에 추가해 주세요.");
+    });
+  }
   if (btnA2HSCopyLink) {
     btnA2HSCopyLink.addEventListener("click", () => copyShareLink());
   }
+
+  // 상단 검색창·바텀시트 헤더의 큰 뒤로가기 화살표(←) 및 Safari/갤럭시 하단 뒤로가기(popstate) 연동
+  const btnTopSearchBack = document.getElementById("btnTopSearchBack");
+  if (btnTopSearchBack) {
+    btnTopSearchBack.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleUniversalAppBack();
+    });
+  }
+
+  const btnSheetHeaderBack = document.getElementById("btnSheetHeaderBack");
+  if (btnSheetHeaderBack) {
+    btnSheetHeaderBack.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleUniversalAppBack();
+    });
+  }
+
+  window.addEventListener("popstate", () => {
+    _isHandlingPopState = true;
+    try {
+      stepBackOneLayer(true);
+    } finally {
+      _isHandlingPopState = false;
+    }
+  });
 
   // 3-3절: 정보가 달라요 (제보 모달) 이벤트 바인딩
   const reportModal = document.getElementById("reportModal");
@@ -6450,7 +6691,9 @@ function openCheckinSetupModal(place, isEditOnly = false) {
   }
 
   syncCheckinSetupModalSelection(saved.fairyColor, saved.hours);
+  ensureBackHistoryGuard("checkin_setup_modal");
   modal.classList.remove("hidden");
+  syncUniversalBackButtons();
 }
 
 function syncCheckinSetupModalSelection(fairyColor, hours) {
