@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
   <!-- App Stylesheet -->
-  <link rel="stylesheet" href="./style.css?v=20261105_5" />
+  <link rel="stylesheet" href="./style.css?v=20261106_5" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -661,7 +661,7 @@
     <div class="modal-backdrop hidden" id="suggestCafeModal" role="dialog" aria-modal="true" aria-labelledby="suggestCafeModalTitle">
       <div class="modal-sheet">
         <div class="modal-header">
-          <h2 class="modal-title" id="suggestCafeModalTitle">새 카공 카페 건의 · 후기 남기기</h2>
+          <h2 class="modal-title" id="suggestCafeModalTitle">새 카공 카페 등록 · 후기 남기기</h2>
           <button type="button" class="icon-btn" id="btnCloseSuggestModal" aria-label="건의 모달 닫기">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -669,23 +669,47 @@
             </svg>
           </button>
         </div>
-        <p class="modal-subtitle">나만 아는 카공 명소나 생생한 후기를 남겨주시면 지도에 바로 반영돼요!</p>
+        <p class="modal-subtitle">새 카페를 등록하면 지도와 목록에 즉시 핀이 생성되고, 이미 있는 카페 이름을 적으면 후기가 추가돼요!</p>
 
         <div class="suggest-form-group">
-          <label class="suggest-field-label">캠퍼스 선택</label>
+          <label class="suggest-field-label">캠퍼스 및 위치 권역 선택</label>
           <div class="suggest-campus-row" id="suggestCampusRow">
             <button type="button" class="detail-cond-chip is-selected" data-suggest-campus="seoul">서울캠 (회기·외대)</button>
             <button type="button" class="detail-cond-chip" data-suggest-campus="global">국제캠 (정건·중상·마을)</button>
           </div>
+          <div class="suggest-anchor-row" id="suggestAnchorRow" aria-label="세부 위치 권역 선택"></div>
         </div>
 
         <div class="suggest-form-group">
-          <label class="suggest-field-label" for="suggestCafeNameInput">카페 이름</label>
+          <label class="suggest-field-label" for="suggestCafeNameInput">카페 이름 <span class="suggest-req-badge">필수</span></label>
           <input
             type="text"
             id="suggestCafeNameInput"
             class="suggest-text-input"
-            placeholder="예: 카페 칸나, 하삼동커피, 8번가 등"
+            placeholder="예: 일기장, 카페 칸나, 8번가 등"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="suggest-form-group">
+          <label class="suggest-field-label" for="suggestLocationInput">도로명·지번 주소 또는 네이버지도 링크 (선택)</label>
+          <input
+            type="text"
+            id="suggestLocationInput"
+            class="suggest-text-input"
+            placeholder="예: 경기 수원시 영통구 덕영대로 1689 5층 또는 https://naver.me/..."
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="suggest-form-group">
+          <label class="suggest-field-label" for="suggestMetaInput">영업시간 · 콘센트/좌석 정보 (선택)</label>
+          <input
+            type="text"
+            id="suggestMetaInput"
+            class="suggest-text-input"
+            placeholder="예: 11:00 ~ 22:00 (일 휴무) · 창가석 콘센트 넉넉"
+            autocomplete="off"
           />
         </div>
 
@@ -695,10 +719,13 @@
             <button type="button" class="detail-cond-chip is-selected" data-suggest-tag="콘센트많음">콘센트 많음</button>
             <button type="button" class="detail-cond-chip" data-suggest-tag="조용한">조용한</button>
             <button type="button" class="detail-cond-chip" data-suggest-tag="밤늦게까지">밤늦게까지</button>
+            <button type="button" class="detail-cond-chip" data-suggest-tag="24시간">24시간</button>
             <button type="button" class="detail-cond-chip" data-suggest-tag="1인석">1인석</button>
+            <button type="button" class="detail-cond-chip" data-suggest-tag="단체석">단체석</button>
             <button type="button" class="detail-cond-chip" data-suggest-tag="대화가능">대화 가능</button>
             <button type="button" class="detail-cond-chip" data-suggest-tag="분위기좋음">분위기 좋음</button>
             <button type="button" class="detail-cond-chip" data-suggest-tag="저가">가성비</button>
+            <button type="button" class="detail-cond-chip" data-suggest-tag="교내카페">교내카페</button>
           </div>
         </div>
 
@@ -707,17 +734,17 @@
           <textarea
             id="suggestReviewInput"
             class="report-textarea"
-            rows="3"
-            placeholder="예: 창가 자리에 콘센트가 다 있고 밤 10시 반까지 해서 과제하기 정말 좋아요!"
+            rows="2"
+            placeholder="예: 창가 자리에 콘센트가 다 있고 밤 10시까지 해서 과제하기 정말 좋아요!"
           ></textarea>
         </div>
 
         <div class="report-actions-stack">
           <button type="button" class="modal-primary-btn" id="btnSubmitSuggestCafe">
-            <span>내 지도에 바로 추가 & 후기 등록하기</span>
+            <span>✨ 카페 등록 &amp; 지도에 바로 반영하기</span>
           </button>
           <button type="button" class="secondary-sheet-btn" id="btnCopyAndOpenSuggestSheet">
-            <span>운영진 데이터 시트에도 함께 제보하기 ↗</span>
+            <span>📋 등록 내용 복사 &amp; 운영진 데이터 시트 열기 ↗</span>
           </button>
         </div>
       </div>
@@ -823,8 +850,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-  <script src="./firebase-config.js?v=20261105_5"></script>
-  <script src="./hours.js?v=20261105_5"></script>
-  <script src="./app.js?v=20261105_5"></script>
+  <script src="./firebase-config.js?v=20261106_5"></script>
+  <script src="./hours.js?v=20261106_5"></script>
+  <script src="./app.js?v=20261106_5"></script>
 </body>
 </html>

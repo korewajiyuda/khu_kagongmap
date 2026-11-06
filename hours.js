@@ -193,7 +193,7 @@
   }
 
   /**
-   * 요일 표현식("월-금", "월~토", "화~일", "토-일", "평일", "주말", "매일", "월,수,금")에서
+   * 요일 표현식("월-금", "월~토", "화~일", "토-일", "평일", "주말", "매일", "월,수,금", "매주 토요일 휴무")에서
    * 활성 요일 인덱스 배열(0=일..6=토)을 추출한다.
    */
   function expandDaySpec(daySpecStr) {
@@ -203,9 +203,33 @@
     // 괄호 안 휴무 표현 제거 전에 별도 추출 가능하도록 괄호 바깥을 우선 본다
     s = s.replace(/\([^)]*\)/g, "").trim();
 
-    if (!s || /매일|연중무휴|전요일/.test(s)) {
+    if (!s || /매일|연중무휴|전요일|공지\s*확인/.test(s)) {
       return [0, 1, 2, 3, 4, 5, 6];
     }
+
+    // "매주 토요일 휴무", "매주 월·화요일 휴무"처럼 괄호 없이 휴무일만 적힌 경우:
+    // 전체 요일(0..6)에서 해당 휴무 요일을 제외한 요일을 활성 요일로 반환
+    if (/휴무/.test(s) && !/[~\-–—]/.test(s)) {
+      const closedClean = s
+        .replace(/공휴일/g, " ")
+        .replace(/요일|휴무|정기휴무|매주/g, " ");
+      const closedSet = new Set();
+      if (/주말/.test(closedClean)) {
+        closedSet.add(0);
+        closedSet.add(6);
+      }
+      for (let i = 0; i < closedClean.length; i++) {
+        const ch = closedClean[i];
+        if (DAY_NAME_TO_INDEX[ch] !== undefined) {
+          closedSet.add(DAY_NAME_TO_INDEX[ch]);
+        }
+      }
+      if (closedSet.size > 0 && closedSet.size < 7) {
+        return [0, 1, 2, 3, 4, 5, 6].filter((d) => !closedSet.has(d));
+      }
+      return [0, 1, 2, 3, 4, 5, 6];
+    }
+
     if (/평일/.test(s) && !/주말/.test(s)) {
       return [1, 2, 3, 4, 5];
     }
@@ -213,47 +237,54 @@
       return [0, 6];
     }
 
-    // 범위 표현 (예: 월~토, 화-일, 월-금, 토-일)
-    const rangeMatch = s.match(/([일월화수목금토])\s*[~\-–—]\s*([일월화수목금토])/);
-    if (rangeMatch) {
-      const startIdx = DAY_NAME_TO_INDEX[rangeMatch[1]];
-      const endIdx = DAY_NAME_TO_INDEX[rangeMatch[2]];
-      const days = [];
+    // "요일", "공휴일"의 '일' 글자가 일요일(0)로 오인되지 않도록 먼저 제거
+    const cleaned = s.replace(/공휴일/g, " ").replace(/요일/g, "");
+    const activeSet = new Set();
+
+    // 1. 모든 범위 표현 추출 (예: 월~토, 화-일, 월~금·일 등)
+    const rangeRegex = /([일월화수목금토])\s*[~\-–—]\s*([일월화수목금토])/g;
+    let remaining = cleaned;
+    let match;
+    while ((match = rangeRegex.exec(cleaned)) !== null) {
+      const startIdx = DAY_NAME_TO_INDEX[match[1]];
+      const endIdx = DAY_NAME_TO_INDEX[match[2]];
       let cur = startIdx;
       for (let step = 0; step < 7; step++) {
-        days.push(cur);
+        activeSet.add(cur);
         if (cur === endIdx) break;
         cur = (cur + 1) % 7;
       }
-      return days;
+      remaining = remaining.replace(match[0], " ");
     }
 
-    // 개별 요일 나열
-    const found = [];
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i];
-      if (DAY_NAME_TO_INDEX[ch] !== undefined && !found.includes(DAY_NAME_TO_INDEX[ch])) {
-        found.push(DAY_NAME_TO_INDEX[ch]);
+    // 2. 범위 외에 개별 나열된 요일 추가 (예: "월~금·일"의 '일', "월,수,금")
+    for (let i = 0; i < remaining.length; i++) {
+      const ch = remaining[i];
+      if (DAY_NAME_TO_INDEX[ch] !== undefined) {
+        activeSet.add(DAY_NAME_TO_INDEX[ch]);
       }
     }
-    return found.length > 0 ? found : [0, 1, 2, 3, 4, 5, 6];
+
+    return activeSet.size > 0 ? Array.from(activeSet) : [0, 1, 2, 3, 4, 5, 6];
   }
 
   /**
-   * days 문자열의 괄호 또는 closed_days 컬럼에서 정기휴무 요일 집합 및 격주 휴무 규칙을 파싱한다.
+   * days 문자열의 괄호(또는 휴무 구절) 및 closed_days 컬럼에서 정기휴무 요일 집합 및 격주 휴무 규칙을 파싱한다.
    * 지원 예:
-   * - "일" / "일요일" / "월 휴무" / "주말 휴무"
+   * - "일" / "일요일" / "월 휴무" / "주말 휴무" / "매주 목요일 휴무"
    * - "매월 2·4주 월" / "매월 1,3주 일"
    */
   function parseClosedDaysRule(daysStr, closedDaysStr) {
     const weeklyClosed = new Set();
     const nthWeekdayRules = []; // { weeks: [2, 4], dayOfWeek: 1 }
 
-    const combined = `${daysStr || ""} | ${closedDaysStr || ""}`;
-
-    // 1.daysStr 안에 "(일 휴무)", "(월 휴무)", "(주말 휴무)", "(주말·공휴일 휴무)" 등이 있는 경우
+    // 1. daysStr 안에 "(일 휴무)", "(월 휴무)" 등이 있거나, 괄호 없이 "매주 목요일 휴무" 형태인 경우 모두 추출
     const parenMatches = String(daysStr || "").match(/\(([^)]+)\)/g) || [];
+    const nonParenDays = String(daysStr || "").replace(/\([^)]*\)/g, "").trim();
     const checkTargets = [...parenMatches, String(closedDaysStr || "")];
+    if (/휴무/.test(nonParenDays)) {
+      checkTargets.push(nonParenDays);
+    }
 
     checkTargets.forEach((rawChunk) => {
       const chunk = rawChunk.replace(/[()]/g, "").trim();
@@ -280,8 +311,10 @@
         weeklyClosed.add(6);
       }
 
-      // "일 휴무", "월", "일요일" 등에서 요일 문자 추출
-      const cleaned = chunk.replace(/요일|휴무|정기휴무|매주/g, " ");
+      // "공휴일", "요일"의 '일' 글자가 일요일(0)로 오인되지 않도록 먼저 제거한 뒤 요일 문자 추출
+      const cleaned = chunk
+        .replace(/공휴일/g, " ")
+        .replace(/요일|휴무|정기휴무|매주/g, " ");
       for (let i = 0; i < cleaned.length; i++) {
         const ch = cleaned[i];
         if (DAY_NAME_TO_INDEX[ch] !== undefined) {
