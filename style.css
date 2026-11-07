@@ -3599,8 +3599,8 @@ body.is-fairy-nav-mode .cafe-map-pin-wrap:not(.is-selected) .cafe-light-orb {
 }
 
 body.is-fairy-nav-mode .fairy-nav-controls-row {
-  grid-template-columns: 0.95fr 1.18fr 0.95fr 0.72fr;
-  gap: 5px;
+  grid-template-columns: 1fr 1.18fr 1fr;
+  gap: 6px;
   margin-bottom: 8px;
 }
 
@@ -4395,45 +4395,63 @@ body.is-fairy-nav-mode .unified-list-bottom-sheet {
   color: var(--text-secondary);
 }
 
-/* 첫 방문 때만 닫을 수 있는 작은 알림 1회 표시 */
+/* 처음에 하단에 작고 귀엽게 뜨는 1년 무료 혜택 미니 팝업 */
 .first-visit-mini-toast {
   position: absolute;
   left: 12px;
-  right: 58px;
-  bottom: calc(49% + 12px);
+  right: auto;
+  max-width: calc(100% - 70px);
+  bottom: calc(49% + 10px);
   z-index: 480;
-  padding: 7px 10px;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.9);
+  padding: 5px 8px 5px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(167, 243, 208, 0.42);
   color: #FFFFFF;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
-  display: flex;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
 .main-swipe-viewport:has(.unified-list-bottom-sheet.snap-peek) .first-visit-mini-toast {
-  bottom: 82px;
+  bottom: 78px;
 }
 
 .first-visit-toast-text-btn {
-  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
   text-align: left;
   color: #F8FAFC;
-  font-size: 11.5px;
-  font-weight: 600;
-  line-height: 1.35;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.first-visit-badge-pill {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #10B981 0%, #3B82F6 100%);
+  color: #FFFFFF;
+  font-size: 9.5px;
+  font-weight: 800;
+  flex-shrink: 0;
 }
 
 .first-visit-toast-close {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.16);
   color: #FFFFFF;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
@@ -5493,6 +5511,240 @@ body.is-night-mode .checkin-status-chip.is-end-btn {
   font-weight: 800;
   vertical-align: middle;
 }
+
+/* =========================================================
+   10) 🧚 실시간 요정 카공 현황 칩 & 현황 모달 & 카페별 요정 목록
+   ========================================================= */
+.fairy-hotspot-chip {
+  height: 28px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  background: linear-gradient(135deg, rgba(238, 242, 255, 0.96) 0%, rgba(245, 243, 255, 0.96) 100%);
+  color: #5B21B6;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
+}
+
+.fairy-hotspot-chip:active {
+  transform: scale(0.95);
+}
+
+.fairy-hotspot-chip.has-live-fairies {
+  border-color: #8B5CF6;
+  background: linear-gradient(135deg, #EEF2FF 0%, #F3E8FF 100%);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.22);
+}
+
+body.is-night-mode .fairy-hotspot-chip {
+  background: rgba(49, 46, 129, 0.55);
+  border-color: rgba(167, 139, 250, 0.45);
+  color: #DDD6FE;
+}
+
+.fairy-hotspot-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.75);
+  flex-shrink: 0;
+}
+
+.fairy-hotspot-chip-count {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #7C3AED;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.fairy-hotspots-modal-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 82vh;
+}
+
+.fairy-hotspots-summary-bar {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(238, 242, 255, 0.92) 0%, rgba(250, 245, 255, 0.92) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.24);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+body.is-night-mode .fairy-hotspots-summary-bar {
+  background: rgba(30, 27, 75, 0.65);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.fairy-hotspots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 56vh;
+  padding-right: 2px;
+}
+
+.fairy-hotspot-card {
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-white);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+
+.fairy-hotspot-card:hover,
+.fairy-hotspot-card.is-top-hotspot {
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 3px 12px rgba(99, 102, 241, 0.1);
+}
+
+.fairy-hotspot-card:active {
+  transform: scale(0.985);
+}
+
+.fairy-hotspot-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fairy-hotspot-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.fairy-hotspot-rank {
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: var(--gemini-grad);
+  color: #FFFFFF;
+  font-size: 10.5px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.fairy-hotspot-place-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fairy-hotspot-count-pill {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #047857;
+  font-size: 11.5px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+body.is-night-mode .fairy-hotspot-count-pill {
+  background: rgba(16, 185, 129, 0.22);
+  color: #6EE7B7;
+}
+
+.fairy-hotspot-meta-line {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.fairy-hotspot-peers,
+.checkin-peers-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.fairy-peer-pill {
+  padding: 3px 8px 3px 5px;
+  border-radius: 999px;
+  background: var(--bg-warm);
+  border: 1px solid var(--border-color);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.fairy-peer-pill.is-me-peer {
+  border-color: rgba(139, 92, 246, 0.55);
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.fairy-peer-mini-img {
+  width: 18px;
+  height: 17px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.fairy-peer-status-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.fairy-hotspots-empty-box {
+  padding: 16px 14px;
+  border-radius: 14px;
+  background: var(--bg-warm);
+  border: 1px dashed var(--border-color);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.fairy-hotspots-empty-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.fairy-hotspots-empty-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
 
 
 

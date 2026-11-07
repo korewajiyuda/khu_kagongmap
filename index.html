@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 
   <!-- App Stylesheet -->
-  <link rel="stylesheet" href="./style.css?v=20261107_1" />
+  <link rel="stylesheet" href="./style.css?v=20261107_4" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -124,6 +124,15 @@
                 <line x1="12" y1="18" x2="12.01" y2="18"></line>
               </svg>
               <span>홈 화면에 추가</span>
+            </button>
+            <button type="button" class="menu-item-btn" id="btnMenuFairyHotspots" role="menuitem" aria-label="지금 요정들이 모여있는 카페 현황 보기">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+              <span>실시간 요정 카공 현황</span>
             </button>
             <button type="button" class="menu-item-btn" id="btnMenuSuggestCafe" role="menuitem" aria-label="새 카공 카페 건의하기">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -265,6 +274,18 @@
         >
           <span>영업 중만</span>
         </button>
+
+        <!-- 다른 요정들이 어디에 많이 앉아있는지 한눈에 보는 현황 칩 -->
+        <button
+          type="button"
+          class="fairy-hotspot-chip"
+          id="btnOpenFairyHotspots"
+          aria-label="지금 다른 요정들이 어디서 공부 중인지 현황 보기"
+        >
+          <span class="fairy-hotspot-chip-dot" aria-hidden="true"></span>
+          <span>🧚 요정 현황</span>
+          <span class="fairy-hotspot-chip-count hidden" id="fairyHotspotChipBadge">0</span>
+        </button>
       </div>
     </section>
 
@@ -311,12 +332,13 @@
             </div>
           </div>
 
-          <!-- 첫 방문 때만 닫을 수 있는 작은 알림 1회 표시 (Google AI Plus 혜택 & 카페 건의 안내) -->
+          <!-- 처음에 하단에 작고 귀엽게 뜨는 1년 무료 혜택 미니 팝업 -->
           <div class="first-visit-mini-toast hidden" id="firstVisitMiniToast" role="status">
             <button type="button" class="first-visit-toast-text-btn" id="btnFirstVisitOpenOffer">
-              <span>🎁 경희대생 Google AI Plus 무료 혜택·카페 건의는 목록 맨 아래나 메뉴(☰)에 있어요</span>
+              <span class="first-visit-badge-pill">무료 혜택</span>
+              <span>🎁 경희대생 Google AI Plus 1년 무료 받기 ›</span>
             </button>
-            <button type="button" class="first-visit-toast-close" id="btnDismissFirstVisitToast" aria-label="알림 닫기">✕</button>
+            <button type="button" class="first-visit-toast-close" id="btnDismissFirstVisitToast" aria-label="혜택 팝업 닫기">✕</button>
           </div>
         </main>
       </div>
@@ -750,6 +772,38 @@
       </div>
     </div>
 
+    <!-- 실시간 요정 카공 현황 모달 (다른 요정들이 어디에 많이 앉아있는지 한눈에 보기) -->
+    <div class="modal-backdrop hidden" id="fairyHotspotsModal" role="dialog" aria-modal="true" aria-labelledby="fairyHotspotsTitle">
+      <div class="modal-sheet fairy-hotspots-modal-sheet">
+        <div class="modal-header">
+          <div class="a2hs-brand-row">
+            <div class="checkin-preview-fairy-badge">
+              <img
+                src="./assets/fairy/fairy-trio.webp?v=20261102_6"
+                alt="요정 삼총사"
+                class="fairy-float"
+                width="42"
+                height="28"
+              />
+            </div>
+            <div>
+              <h2 class="modal-title" id="fairyHotspotsTitle">실시간 요정 카공 현황</h2>
+              <p class="checkin-setup-place-sub" id="fairyHotspotsSubtitle">지금 다른 요정들이 어디에 많이 앉아있는지 한눈에 확인해 보세요</p>
+            </div>
+          </div>
+          <button type="button" class="icon-btn" id="btnCloseFairyHotspots" aria-label="요정 현황 닫기">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <div class="fairy-hotspots-summary-bar" id="fairyHotspotsSummaryBar"></div>
+        <div class="fairy-hotspots-list" id="fairyHotspotsList" role="list"></div>
+      </div>
+    </div>
+
     <!-- "나 여기서 공부 중" 내 요정 아바타 설정 바텀시트 (첫 체크인 또는 설정 변경 시) -->
     <div class="modal-backdrop hidden" id="checkinSetupModal" role="dialog" aria-modal="true" aria-labelledby="checkinSetupTitle">
       <div class="modal-sheet checkin-setup-modal-sheet">
@@ -850,8 +904,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-  <script src="./firebase-config.js?v=20261107_1"></script>
-  <script src="./hours.js?v=20261107_1"></script>
-  <script src="./app.js?v=20261107_1"></script>
+  <script src="./firebase-config.js?v=20261107_4"></script>
+  <script src="./hours.js?v=20261107_4"></script>
+  <script src="./app.js?v=20261107_4"></script>
 </body>
 </html>
